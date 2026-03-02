@@ -1,0 +1,3 @@
+[submodule "skills/visual-explainer"]
+	path = skills/visual-explainer
+	url = git@github.com:nicobailon/visual-explainer.git
