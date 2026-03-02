@@ -4,3 +4,6 @@
 [submodule "taste-skill"]
 	path = taste-skill
 	url = git@github.com:Leonxlnx/taste-skill.git
+[submodule "anthropics-skills"]
+	path = anthropics-skills
+	url = git@github.com:anthropics/skills.git
