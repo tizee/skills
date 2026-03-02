@@ -68,10 +68,10 @@ rss recategorize <query> --category CATEGORY
 
 ### fetch
 
-Fetch and display feed content. Progressive disclosure: summaries by default.
+Fetch and display feed content with full article content by default.
 
 ```
-rss fetch <query> [--limit N] [--refresh] [--full] [--index N]
+rss fetch <query> [--limit N] [--refresh] [--index N]
 rss fetch --all [--limit N] [--refresh]
 ```
 
@@ -80,8 +80,7 @@ rss fetch --all [--limit N] [--refresh]
 | `--all` | Fetch all subscribed feeds |
 | `--limit N` | Max items per feed (default: 10) |
 | `--refresh` | Bypass cache and re-fetch from source |
-| `--full` | Show full article content instead of summary |
-| `--index N` | Show a specific item by 1-based index (always full content) |
+| `--index N` | Show a specific item by 1-based index |
 
 ### search
 
