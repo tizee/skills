@@ -1,0 +1,4 @@
+interface:
+  display_name: "yaw"
+  short_description: "Manage scheduled workflows and cron jobs declaratively"
+  default_prompt: "Use $yaw to list all scheduled workflows and their status."
