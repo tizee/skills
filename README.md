@@ -35,6 +35,7 @@ Personal agent skill set shared across different AI agent products. Each skill i
 
 | Skill | Description |
 |---|---|
+| `brainstorming` | Collaborative design ideation. Explores user intent, requirements, and design before implementation. Enforces presenting a design and getting user approval before any code is written. |
 | `plan-with-files` | Manus-style file-based planning for complex tasks. Creates `.plans/<feature-name>-yymmdd/` with `task_plan.md`, `findings.md`, and `progress.md`. Use for tasks requiring more than 5 tool calls. |
 | `git-repo-analysis` | Analyze git repositories and generate comprehensive markdown documentation. Performs top-down analysis: overview → architecture → modules → docs. Runs in forked context. |
 
@@ -55,13 +56,15 @@ Personal agent skill set shared across different AI agent products. Each skill i
 | `changelog` | Generate and update `CHANGELOG.md` by analyzing git commit history. Handles new changelogs and release appends using conventional commit format. |
 | `commit-postmortem-generator` | Analyze fix commits in git history and generate concise postmortem reports. Groups related commits and stores reports in `./.postmortem/`. |
 | `tmux` | Remote control tmux sessions for interactive CLIs (Python REPL, GDB, etc.) by sending keystrokes and scraping pane output. Uses `create-session.sh` for session management. |
+| `tgbot` | Operate the `tgbot` CLI to send Telegram messages, files, and images from the terminal or from automated agent workflows. Supports allowlist security and markdown rendering. |
 
 ### AI Agent Utilities
 
 | Skill | Description |
 |---|---|
 | `ask-codex` | Delegate hard problems to Codex using a file-based input/output pattern. Use for subtle bugs, deep algorithm analysis, obscure protocols, or when stuck after multiple attempts. |
-| `create-skill` (`skill-creator`) | Guide for creating or updating skills. Defines the skill folder structure, SKILL.md schema, agent configs, and best practices for extending agent capabilities. |
+| `codex-skill` | Guide for creating effective Codex skills. Defines skill folder structure, SKILL.md schema, agent configs, and best practices for extending agent capabilities. |
+| `cli-agent-ux-review` | Review a CLI tool's source code for AI agent friendliness and Agent Experience (AX) quality. Evaluates how well a tool works when operated by AI agents rather than humans directly. Runs as an Explore agent (forked context). |
 | `osay` | AI-powered text-to-speech CLI (`osay`). Converts text to speech for pronunciation queries, reading aloud, audio file generation, or language practice. |
 
 ## Structure
