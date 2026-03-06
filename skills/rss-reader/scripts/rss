@@ -808,7 +808,8 @@ def _collect_items(feeds: list[dict], refresh: bool) -> list[dict]:
     # Phase 1: scan cache
     for f in feeds:
         url = f["xmlUrl"]
-        cached = None if refresh else get_cached_any(url)
+        # Try fresh cache first (respects TTL), fall back to any cached data
+        cached = None if refresh else (get_cached(url) or get_cached_any(url))
         if cached:
             try:
                 parsed = parse_rss_xml(cached, f["title"])
