@@ -7,3 +7,6 @@
 [submodule "anthropics-skills"]
 	path = anthropics-skills
 	url = git@github.com:anthropics/skills.git
+[submodule "openai-skills"]
+	path = openai-skills
+	url = git@github.com:openai/skills.git
