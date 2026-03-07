@@ -9,19 +9,9 @@ Manage RSS/Atom subscriptions (OPML) and fetch feed content as markdown or JSON.
 
 ## Invocation
 
-Always use `rss` directly. It is already installed on PATH.
+The `rss` CLI tool must be installed on PATH. If `rss` is not found (command not found error), stop and tell the user the tool is not installed.
 
-```bash
-rss list
-```
-
-Only if `rss` is not found (command not found error), fall back to the skill directory:
-
-```bash
-scripts/rss list
-```
-
-Do NOT use `scripts/rss` as the default invocation.
+Do NOT attempt any fallback. The tool must be installed before this skill can be used.
 
 Default output is readable markdown. Add `--json` before the subcommand for structured JSON.
 
@@ -149,16 +139,6 @@ rss search "rust" --limit 10
 ```
 
 Synthesize findings into a summary for the user.
-
-## Setup
-
-If `rss` is missing from PATH, ask the user to symlink:
-
-```bash
-ln -sf /Users/tizee/projects/project-conf/dotfiles/tizee-dotfiles/claude/skills/rss-reader/scripts/rss /usr/local/bin/rss
-```
-
-Requires `uv`. The script manages its own dependencies (httpx, defusedxml, html-to-markdown) via inline metadata.
 
 ## Tips
 
