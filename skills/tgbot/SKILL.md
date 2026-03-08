@@ -55,6 +55,41 @@ tgbot send <bot> --chats target1 --chats target2 '<text>'
 
 Markdown is processed automatically. Use `--no-md` to send raw text.
 
+**Note:** When sending inline markdown messages (using single quotes `'...'`), you do NOT need to escape line break symbols (`\n`). Simply use actual newlines directly in the string:
+
+```bash
+# Correct: use actual newlines
+tgbot send mybot devteam '*Bold title*
+
+Some paragraph text here.'
+
+# Wrong: escaping newlines (not needed)
+tgbot send mybot devteam '*Bold title*\n\nSome paragraph text here.'
+```
+
+### Sending large content (long articles, analysis, etc.)
+
+For large text content (like long articles, analysis reports, or full blog post summaries),
+**prefer writing to a temp file and piping it**, NOT sending as a file attachment:
+
+```bash
+# Write content to temp file
+cat > /tmp/message.md << 'EOF'
+# Long article title
+
+Large content here...
+EOF
+
+# Pipe to send as text (NOT --file)
+cat /tmp/message.md | tgbot send <bot> <target> -
+```
+
+Only use `--file` when the user explicitly requests a file/document (e.g., "send the log file",
+"send as PDF", "send the report as a file").
+
+Why: Piping sends readable text directly to the chat, while `--file` sends a downloadable
+attachment that requires clicking to view.
+
 ### Step 3: Verify the result
 
 On success, tgbot prints where it sent and the message ID:
