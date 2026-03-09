@@ -134,7 +134,74 @@ sort = Cover
 
 Read `references/makefile-template.md` for the complete Makefile template. Adapt targets if the project has special needs (e.g., no browser install step, custom build commands).
 
-### 6. Create directory structure
+### 6. Create README.md
+
+Generate a README with the project name, description, installation, usage, development, and license sections. Use `uv` as the package manager throughout.
+
+```markdown
+# <project-name>
+
+<one-line description>
+
+## Installation
+
+### From PyPI (when published)
+
+```bash
+uv add <project-name>
+```
+
+### From source
+
+```bash
+git clone <repo-url>
+cd <project-name>
+uv sync
+```
+
+## Usage
+
+```python
+import <package>
+```
+
+<!-- For CLI tools: -->
+<!-- ```bash -->
+<!-- uv run <cmd> -->
+<!-- ``` -->
+
+## Development
+
+```bash
+# Install dependencies
+uv sync
+
+# Run tests
+make test
+
+# Lint & format
+make lint
+make fmt
+
+# Type check
+make typecheck
+```
+
+## License
+
+<license>
+```
+
+Adapt the README:
+- For CLI tools, uncomment and fill in the CLI usage section, remove the library import example.
+- For libraries, keep the import example, remove CLI section.
+- If the user provides a repo URL, fill in `<repo-url>`; otherwise use a placeholder.
+
+### 7. Create AGENTS.md
+
+Read `references/agents-md-template.md` for the default AGENTS.md template. Copy it to the project root and fill in `<project-name>`, `<package>`, and project type based on user input. Add project-specific rules if the user mentions any (e.g., async framework, database, API conventions).
+
+### 8. Create directory structure
 
 ```
 <project-name>/
@@ -148,6 +215,7 @@ Read `references/makefile-template.md` for the complete Makefile template. Adapt
 ├── pytest.ini
 ├── Makefile
 ├── README.md
+├── AGENTS.md
 └── .gitignore
 ```
 
@@ -166,7 +234,7 @@ build/
 .ruff_cache/
 ```
 
-### 7. Verify setup
+### 9. Verify setup
 
 ```bash
 uv sync
@@ -189,3 +257,4 @@ All three should pass on the initial skeleton before writing any real code.
 
 - `references/ruff-pyright-config.md` — Complete ruff + pyright configuration with rule-by-rule rationale. Read this when generating `pyproject.toml`.
 - `references/makefile-template.md` — Makefile template with all standard targets. Read this when generating the Makefile.
+- `references/agents-md-template.md` — Default AGENTS.md template with project commands, code style, and rules for AI agents. Read this when generating AGENTS.md.
