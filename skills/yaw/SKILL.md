@@ -8,6 +8,9 @@ description: >
   recurring agent tasks, or workflow orchestration. Triggers on "cron",
   "scheduled tasks", "cron jobs", "timed tasks", "periodic", "recurring",
   "yaw", "workflow", or any request to schedule, list, or manage recurring commands.
+metadata:
+  author: tizee
+  version: "0.4.0"
 ---
 
 # yaw -- yet another workflow
@@ -51,7 +54,7 @@ yaw init
 
 ### list
 
-List all registered workflows with schedule, enabled status, and last run result.
+List all registered workflows with schedule, next run time (accounting for jitter), enabled status, jitter, and last run result.
 
 ```
 yaw list
@@ -99,7 +102,19 @@ Register or remove a workflow. Automatically syncs crontab.
 
 ```
 yaw add <file.yaml>
+yaw add <file.yaml> --force    # overwrite existing job with same name
 yaw remove <workflow-name>
+```
+
+### update
+
+Update individual fields of an existing job in-place. Uses `--set key=value` syntax. Automatically syncs crontab.
+
+Updatable fields: `command`, `description`, `enabled`, `timeout`, `cwd`, `env_file`, `jitter`.
+
+```
+yaw update <workflow-name> --set timeout=600
+yaw update <workflow-name> --set enabled=false --set jitter=30
 ```
 
 ### enable / disable
@@ -126,6 +141,14 @@ Sync all enabled workflows to system crontab, or remove all yaw entries from cro
 ```
 yaw install
 yaw uninstall
+```
+
+### version
+
+Show version info (version, commit, build time).
+
+```
+yaw version
 ```
 
 ## Workflow Definition Format
@@ -176,6 +199,22 @@ steps:
     command: ./scripts/deploy.sh
     condition: "${{ workflow.trigger == 'manual' }}"
 ```
+
+### Jitter (thundering herd mitigation)
+
+The `jitter` field (int, default 0) adds a deterministic delay in seconds before command execution. The delay is computed via MD5 hash of the job name, producing a stable offset in `[0, jitter]`. Same job name always yields the same delay — predictable and debuggable.
+
+Use jitter when multiple jobs share the same cron schedule to spread load:
+
+```yaml
+name: check-api-1
+trigger:
+  - cron: "0 * * * *"
+command: ~/scripts/check-api.sh
+jitter: 60
+```
+
+The `NEXT RUN` column in `yaw list` shows the effective fire time (cron time + jitter offset). The `show` command also displays the jitter value.
 
 ### Validation rules
 
