@@ -7,6 +7,26 @@ description: Bootstrap new Python projects with a production-grade dev toolchain
 
 Bootstrap production-grade Python projects with a standardized dev toolchain.
 
+## Instructions
+
+### Tools
+
+ALWAYS use `uv` in Python. `uv add` for installs, NEVER `pip install` directly.
+`uv run example.py` for running, NEVER `python example.py` or `python3 example.py` directly.
+
+Avoid editing `pyproject.toml` directly — use `uv add`, `uv remove`, etc. where possible.
+
+Use `ruff` for linting and formatting Python files, run via `uv run ruff`. Run `ruff check` on any new files before running them or including them. Fix any warnings or errors before proceeding.
+
+Run type checking with `pyright` on all new code. Run via `uv run pyright` only on the edited file(s). Always run after any changes to Python code, fix the errors before proceeding, avoid suppressing types where possible (e.g. `# noqa`, `# type: ignore`).
+
+### Guidelines
+
+- Use google docstring format
+- Follow SOLID design principles where possible
+- Functionality is most important — do not obsess over test coverage
+- If writing unit tests, always use `pytest`, run via `uv run pytest`
+
 ## Toolchain
 
 | Tool | Role | Invocation |

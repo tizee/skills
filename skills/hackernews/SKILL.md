@@ -1,6 +1,6 @@
 ---
 name: hackernews
-description: Fetch and explore Hacker News content via the official API. Use when the user wants to browse top/best/new/ask/show/job stories, get story details with comments, look up user profiles, or check recently changed items. Triggers on "hacker news", "HN stories", "HN front page", "trending on HN", "show hn", "ask hn", or any request to fetch or summarize Hacker News content.
+description: Fetch and explore Hacker News content via the official API. Use when the user wants to browse top/best/new/ask/show/job stories, get story details with comments, look up user profiles, search by keyword, or filter stories by time window (e.g. past 24h). Triggers on "hacker news", "HN stories", "HN front page", "trending on HN", "show hn", "ask hn", or any request to fetch or summarize Hacker News content.
 ---
 
 # Hacker News
@@ -15,13 +15,7 @@ Always use `hn` directly. It is already installed on PATH.
 hn stories --type top --limit 10
 ```
 
-Only if `hn` is not found (command not found error), fall back to invoking the script from the skill directory:
-
-```bash
-scripts/hn stories --type top --limit 10
-```
-
-Do NOT use `scripts/hn` as the default invocation.
+Only if `hn` is not found (command not found error), fall back to api requests.
 
 Default output is readable markdown. Add `--json` before the subcommand for structured JSON (for piping to `jq` or other tools).
 
@@ -32,7 +26,7 @@ Default output is readable markdown. Add `--json` before the subcommand for stru
 Fetch ranked story lists.
 
 ```
-hn stories --type <type> --limit <N>
+hn stories --type <type> --limit <N> [--since <duration>] [--keyword <query>]
 ```
 
 | `--type` | Content |
@@ -42,9 +36,50 @@ hn stories --type <type> --limit <N>
 | `best` | Highest-rated |
 | `ask` | Ask HN |
 | `show` | Show HN |
-| `job` | Job listings |
+| `job` | Job listings (Firebase only, no --since support) |
 
 `--limit` defaults to 10. API max: 500 for top/new/best, 200 for ask/show/job.
+
+#### Time-based search (--since)
+
+Filter stories by time window using the Algolia Search API. Accepts duration strings:
+
+| Duration | Meaning |
+|----------|---------|
+| `30m` | Past 30 minutes |
+| `1h` | Past hour |
+| `6h` | Past 6 hours |
+| `24h` | Past 24 hours |
+| `3d` | Past 3 days |
+| `7d` | Past week |
+| `2w` | Past 2 weeks |
+
+When `--since` is used, the command switches from the Firebase API to the Algolia HN Search API. Results for `--type new` are sorted by date (newest first); all other types are sorted by relevance/points.
+
+**Note:** `--type job` does not work with `--since` (Algolia does not index job posts separately).
+
+#### Keyword search (--keyword)
+
+Search stories by keyword. Can be combined with `--since` for time-bounded keyword search. Uses Algolia Search API.
+
+#### Examples
+
+```bash
+# Top stories from the past 24 hours
+hn stories --since 24h
+
+# AI-related stories from the past week
+hn stories --since 7d --keyword AI
+
+# Newest Ask HN posts from the past 3 days
+hn stories --type ask --since 3d
+
+# Show HN posts about Rust from the past day, as JSON
+hn --json stories --type show --since 24h --keyword rust
+
+# Default: top stories from Firebase (no time filter)
+hn stories --type top --limit 20
+```
 
 Output: numbered list with title, link, score, author, time, and comment count with HN discussion link.
 
@@ -79,28 +114,37 @@ Fetch recently changed items and profiles.
 hn updates
 ```
 
-## Setup (for reference only)
+## Installation
 
-If `hn` is missing from PATH, ask the user to run:
+The `hn` tool is a Python package in the `hackernews-reader/` directory.
 
 ```bash
-ln -sf /Users/tizee/projects/project-conf/dotfiles/tizee-dotfiles/claude/skills/hackernews/scripts/hn /usr/local/bin/hn
+cd hackernews-reader
+uv sync                  # install dependencies
+uv tool install .        # install globally as `hn`
 ```
-
-Requires `uv`. The script manages its own dependencies (httpx) via inline metadata.
 
 ## Direct API Access
 
-For queries the script does not cover, use curl or `WebFetch` against the HN Firebase API directly. See `references/api.md` for full endpoint documentation.
+For queries the tool does not cover, use curl or `WebFetch` against the HN Firebase API or Algolia Search API directly.
 
+Firebase API (see `references/api.md`):
 ```bash
 curl -s https://hacker-news.firebaseio.com/v0/maxitem.json
 curl -s https://hacker-news.firebaseio.com/v0/item/8863.json
 ```
 
+Algolia Search API:
+```bash
+# Stories matching "rust" from past 24h
+curl -s "http://hn.algolia.com/api/v1/search?tags=story&query=rust&numericFilters=created_at_i>$(date -v-24H +%s)"
+```
+
 ## Tips
 
 - Comment trees can be large. Start with `--comment-depth 1` and increase if needed.
-- The API has no rate limit, but batch fetching many items creates many HTTP requests. Keep `--limit` reasonable.
+- Firebase API has no rate limit, but batch fetching many items creates many HTTP requests. Keep `--limit` reasonable.
+- Algolia API is rate-limited to 10,000 requests/hour per IP.
 - Markdown output converts HTML to readable text (links preserved, tags stripped). Use `--json` for raw HTML fields.
-- User `submitted` lists can contain thousands of IDs; the script returns only the 20 most recent.
+- User `submitted` lists can contain thousands of IDs; the tool returns only the 20 most recent.
+- When `--since` and `--keyword` are both omitted, the tool uses the Firebase API (identical to the original behavior).
