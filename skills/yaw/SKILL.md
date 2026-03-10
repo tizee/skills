@@ -242,16 +242,20 @@ For full schema and examples, read `references/examples.md`.
 3. Inspect definition: `yaw show <name>`
 4. Fix the underlying issue, then test: `yaw run <name>`
 
+Common failure: **exit 127** means `command not found` — the command is not on cron's minimal `PATH`. Fix by using absolute paths in the workflow command (see "Scheduling a headless agent task" above).
+
 ### Scheduling a headless agent task
 
-Write a workflow that invokes the agent CLI:
+**Important: use absolute paths for commands.** Cron runs with a minimal `PATH` (typically `/usr/bin:/bin`). Commands installed in user directories (e.g. `~/.local/bin/llms`, `~/.cargo/bin/`, Homebrew paths) will fail with exit 127 (`command not found`) unless referenced by absolute path.
+
+Find the absolute path with `which <command>`, then use it in the workflow definition:
 
 ```yaml
 name: daily-digest
 trigger:
   - cron: "0 9 * * *"
 command: >
-  llms agent -p "Check RSS feeds and send digest to telegram"
+  /Users/<user>/.local/bin/llms agent -p "Check RSS feeds and send digest to telegram"
   --tools "Bash,Read,WebFetch"
 ```
 
@@ -262,6 +266,17 @@ name: daily-digest
 trigger:
   - cron: "0 9 * * *"
 command: ~/scripts/daily-digest.sh
+```
+
+Alternatively, set `PATH` in the job's `env` field to make multiple commands available:
+
+```yaml
+name: daily-digest
+trigger:
+  - cron: "0 9 * * *"
+env:
+  PATH: "/Users/<user>/.local/bin:/usr/local/bin:/usr/bin:/bin"
+command: llms agent -p "..." --tools "Bash,Read,WebFetch"
 ```
 
 ### Self-healing with failure hooks
