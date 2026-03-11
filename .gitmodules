@@ -13,3 +13,6 @@
 [submodule "cloudflare-skills"]
 	path = cloudflare-skills
 	url = git@github.com:cloudflare/skills.git
+[submodule "obisidian-skills"]
+	path = obisidian-skills
+	url = git@github.com:kepano/obsidian-skills.git
