@@ -7,6 +7,22 @@ description: Interact with Obsidian vaults using the Obsidian CLI to read, creat
 
 Use the `obsidian` CLI to interact with a running Obsidian instance. Requires Obsidian to be open.
 
+## Prerequisites (IMPORTANT)
+
+1. **Obsidian app must be running.** The CLI binary (`obsidian`) communicates with a running Obsidian instance via IPC. If no instance is running, the CLI launches the Electron app server instead of executing CLI commands — you'll see `Loaded main app package ...obsidian.asar` output and the command hangs indefinitely. If this happens, ask the user to open Obsidian first.
+
+2. **All Bash calls MUST use `dangerouslyDisableSandbox=true`.** The CLI needs IPC access to the running Obsidian process, which the sandbox blocks. Without this flag, commands will either time out or fail with permission errors.
+
+**Correct usage:**
+```
+Bash(command='obsidian vaults', dangerouslyDisableSandbox=true)
+```
+
+**Wrong — will hang or fail:**
+```
+Bash(command='obsidian vaults')  # missing sandbox bypass, IPC blocked
+```
+
 ## Command reference
 
 Run `obsidian help` to see all available commands. This is always up to date. Full docs: https://help.obsidian.md/cli
