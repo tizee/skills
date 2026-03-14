@@ -1,8 +1,6 @@
 ---
 name: kiss
 description: taste matters. review code as a senior software engineer
-context: fork
-agent: Explore
 ---
 
 # Rule
