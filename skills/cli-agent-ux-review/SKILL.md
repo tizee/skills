@@ -1,8 +1,6 @@
 ---
 name: cli-agent-ux-review
 description: Review a CLI tool's source code for AI agent friendliness and Agent Experience (AX) quality. Use this skill when working inside a CLI tool's repository and the user wants to evaluate how well the tool works when operated by AI agents rather than humans directly. Triggers on phrases like "agent-friendly", "AX review", "agent experience", "agent-ux", "cli review for agents", or any request to assess whether a CLI tool is easy for coding agents to use, parse, and operate reliably. Also use when someone asks about improving a CLI tool's output format, error handling, or automation story from an agent's perspective.
-context: fork
-agent: Explore
 ---
 
 # CLI Agent-UX Review
