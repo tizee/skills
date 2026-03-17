@@ -1,25 +1,22 @@
 ---
 name: osay
-description: AI-powered text-to-speech CLI tool. Use for pronunciation queries, reading text aloud, generating audio files, or language practice. Triggers on "how to pronounce", "say this", "read aloud", "TTS", "text to speech", "speak", or audio generation requests.
+description: AI-powered text-to-speech CLI tool. Use for pronunciation queries, reading text aloud, generating audio files, or language practice. Use this skill whenever you need to speak text, pronounce words, convert text to audio, read content aloud, or generate speech files. Triggers on "how to pronounce", "say this", "read aloud", "TTS", "text to speech", "speak", "audio generation", "voice synthesis", or any request involving hearing how something sounds.
 ---
 
 # osay - AI Text-to-Speech
 
-A CLI tool for AI-powered speech synthesis. Convert text to natural-sounding speech for various use cases.
+A CLI tool for AI-powered speech synthesis via OpenAI's gpt-4o-mini-tts API
+with automatic fallback to macOS's built-in `say` command.
 
 ## Quick Reference
 
 ```bash
-# Show all available options
-osay --help
-
-# Basic usage - speak text
+# Basic usage - speak text (default voice: alloy, default tone: cheerful)
 osay "Hello, world!"
 
 # Check pronunciation of unfamiliar words
 osay "ephemeral"
 osay "Nietzsche"
-osay "queue"
 
 # With specific voice
 osay -v coral "Welcome to the presentation."
@@ -29,84 +26,21 @@ osay -o output.mp3 "This will be saved to a file."
 
 # Replay last audio
 osay -p
+
+# Neutral tone (disable default cheerful instructions)
+osay --no-instructions "Objective statement."
+
+# JSON output for agents
+osay --json "Hello"
 ```
-
-## Use Cases
-
-### 1. Pronunciation Queries
-
-Quickly hear correct pronunciation of unfamiliar words:
-
-```bash
-# English words
-osay "pronunciation"
-osay "worcestershire"
-
-# Names and proper nouns
-osay "Dostoevsky"
-osay "Nguyen"
-
-# Technical terms
-osay "asynchronous"
-osay "kubernetes"
-```
-
-### 2. Content Reading
-
-Read articles, documentation, or text content aloud:
-
-```bash
-# Read a paragraph
-osay "The quick brown fox jumps over the lazy dog."
-
-# With neutral tone (no default cheerfulness)
-osay --no-instructions "This is a factual news report."
-
-# Slow and clear for comprehension
-osay --instructions "Speak slowly and clearly" "Complex technical content here."
-```
-
-### 3. Audio Generation
-
-Create audio files for various purposes:
-
-```bash
-# Podcast intro
-osay -v onyx -o intro.mp3 "Welcome to the show."
-
-# Notification sounds
-osay -o alert.mp3 "Task completed successfully."
-
-# Voice memo
-osay -o memo.mp3 "Remember to review the pull request tomorrow."
-```
-
-### 4. Language Learning
-
-Practice pronunciation and listening comprehension:
-
-```bash
-# Practice sentences
-osay -v coral "I'd like a cup of coffee, please."
-
-# Slow speed for beginners
-osay --instructions "Speak slowly, pausing between phrases" \
-  "Could you repeat that more slowly?"
-
-# Natural native speed
-osay --instructions "Speak at natural native speed" \
-  "I'm gonna grab a coffee real quick."
-```
-
-See [examples/english/SENTENCES.md](examples/english/SENTENCES.md) for practice sentence collections.
 
 ## Voices
 
-List available voices with `osay -v '?'`
+Default voice is `alloy`. List all with `osay -v '?'`.
 
 | Voice   | Characteristics                    |
 |---------|-----------------------------------|
-| alloy   | Neutral, balanced                 |
+| alloy   | Neutral, balanced (default)       |
 | ash     | Soft, gentle                      |
 | ballad  | Melodic, smooth                   |
 | coral   | Warm, conversational              |
@@ -119,44 +53,33 @@ List available voices with `osay -v '?'`
 
 ## Speech Instructions
 
-Control tone and delivery style:
+Default instruction: "Speak in a cheerful and positive tone."
+
+Control tone and delivery style with `--instructions`, or disable defaults with `--no-instructions`:
 
 ```bash
-# Natural conversation
-osay --instructions "Speak naturally, like talking to a friend" "Hey, what's up?"
-
-# Professional presentation
-osay --instructions "Speak clearly and professionally" "Q4 results exceeded expectations."
-
-# Emphatic
+osay --instructions "Speak slowly and clearly" "Complex technical content."
 osay --instructions "Speak with enthusiasm" "This is amazing news!"
-
-# Neutral (disable default tone)
-osay --no-instructions "Objective statement."
+osay --no-instructions "Factual news report."
 ```
 
-## Cache Management
-
-Audio files are cached automatically in `~/.osay/audios/`:
+## Input Methods
 
 ```bash
-# List cached audio with metadata
-osay --list-cached
+# Direct text argument
+osay "Hello, world!"
 
-# Replay most recent
-osay -p
-osay --prev
+# Read from file
+osay -f mytext.txt
 
-# Select from cache interactively (with fzf)
-osay --play-cached
-
-# Play specific cached audio by ID
-osay --play-cached abc123
+# Pipe from stdin
+echo "Hello from a pipe" | osay
+cat article.txt | osay -v coral
 ```
 
 ## Output Formats
 
-Use `--format` to specify audio format:
+Use `--format` to specify audio format (OpenAI only):
 
 | Format | Use Case                          |
 |--------|-----------------------------------|
@@ -168,78 +91,118 @@ Use `--format` to specify audio format:
 | pcm    | Raw audio, processing             |
 
 ```bash
-osay -o output.mp3 "Default format"
 osay -o speech.wav --format wav "High quality audio"
 osay -o compressed.opus --format opus "Small file size"
 ```
 
-## Input Methods
+## Playback Modes
 
-Multiple ways to provide text:
+| Mode            | Trigger                  | Latency | Caches? |
+|-----------------|--------------------------|---------|---------|
+| Cached playback | default (cache enabled)  | Medium  | Yes     |
+| Live streaming  | `--no-cache`             | Lowest  | No      |
+| File output     | `-o <file>`              | N/A     | No      |
+| Cache hit       | same input, cache exists | Instant | N/A     |
 
-```bash
-# Direct text argument
-osay "Hello, world!"
+Live streaming uses PCM format via `LocalAudioPlayer` for lowest time-to-first-audio.
 
-# Read from file
-osay -f mytext.txt
-osay -f document.txt -v nova
+## Cache Management
 
-# Pipe from stdin
-echo "Hello from a pipe" | osay
-cat article.txt | osay -v coral
-
-# Combine with other commands
-curl -s https://example.com/quote.txt | osay
-```
-
-## Streaming Mode
-
-Use `--no-cache` for lowest latency (live streaming, no cache):
+Audio files are cached automatically in `~/.osay/audios/` using content-addressable
+SHA-256 hashes of `(text, voice, format, instructions)`.
 
 ```bash
-# Quick response without caching
-osay --no-cache "Instant playback!"
+# List cached audio with metadata
+osay --list-cached
 
-# Useful for real-time applications
-osay --no-cache -v coral "This plays immediately"
+# Replay most recent
+osay -p
+
+# Select from cache interactively (requires fzf)
+osay --play-cached
+
+# Play specific cached audio by ID
+osay --play-cached abc123
+
+# Clean up expired entries
+osay --cleanup
 ```
 
-## Batch Processing
+## Agent UX (JSON Mode)
 
-Process multiple texts:
+Pass `--json` for structured output. JSON goes to stdout, status messages to stderr.
+
+| Command                        | JSON stdout                                |
+|--------------------------------|--------------------------------------------|
+| `osay --json "hello"`          | `{"status":"ok","cache_hit":false,...}`     |
+| `osay --json "hello"` (cached) | `{"status":"ok","cache_hit":true,"id":...}` |
+| `osay --list-cached --json`    | `{"items":[...]}`                          |
+| `osay --show-key --json`       | `{"configured":true,"source":"key.json"}`  |
+| `osay --cleanup --json`        | `{"status":"ok","removed":3}`              |
+| `osay --setup KEY --json`      | `{"status":"ok","key_file":"..."}`         |
+| (error)                        | `{"error":"no_input","message":"..."}`     |
+
+### Exit Codes
+
+| Code | Meaning                            |
+|------|------------------------------------|
+| 0    | Success                            |
+| 1    | General error                      |
+| 2    | No text provided / file not found  |
+| 3    | API key invalid or missing         |
+
+### Non-Interactive Key Setup
+
+Agents should use `osay --setup sk-... --json` (no TTY required).
+
+## Use Cases
+
+### Pronunciation Queries
 
 ```bash
-# From file (one per line)
-while IFS= read -r line; do
-  osay "$line"
-  sleep 0.5
-done < texts.txt
-
-# Generate multiple files
-osay -o file1.mp3 "First message"
-osay -o file2.mp3 "Second message"
+osay "worcestershire"
+osay "Dostoevsky"
+osay "kubernetes"
 ```
+
+### Audio Generation
+
+```bash
+osay -v onyx -o intro.mp3 "Welcome to the show."
+osay -o memo.mp3 "Remember to review the pull request."
+```
+
+### Language Learning
+
+```bash
+osay --instructions "Speak slowly, pausing between phrases" \
+  "Could you repeat that more slowly?"
+osay --instructions "Speak at natural native speed" \
+  "I'm gonna grab a coffee real quick."
+```
+
+See [examples/english/SENTENCES.md](examples/english/SENTENCES.md) for practice sentence collections.
 
 ## Configuration
 
 ### API Key Management
 
 ```bash
-# Setup OpenAI API key interactively
-osay --setup
-
-# Check if key is configured
-osay --show-key
-
-# Remove stored key
-osay --remove-key
+osay --setup           # Interactive setup
+osay --setup sk-...    # Direct key (agent-friendly)
+osay --show-key        # Check key status
+osay --remove-key      # Remove stored key
 ```
+
+Key resolution priority:
+1. `OPENAI_API_KEY` environment variable
+2. `~/.config/osay/key.json` file
 
 ### Environment
 
-- **Config file**: `~/.config/osay/config`
+- **Config file**: `~/.config/osay/config.json`
+- **Key file**: `~/.config/osay/key.json` (0600 permissions)
 - **Audio cache**: `~/.osay/audios/`
-- **Environment variable**: `OPENAI_API_KEY` (overrides config file)
+- **Environment variable**: `OPENAI_API_KEY` (overrides key file)
 
-Falls back to macOS `say` command if no OpenAI key is available.
+Falls back to macOS `say` command if no valid OpenAI key is available.
