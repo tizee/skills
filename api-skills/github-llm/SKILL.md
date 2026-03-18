@@ -1,7 +1,7 @@
 ---
 name: github-llm
 description: >-
-  Browse GitHub repository contents from the command line using a Cloudflare Worker HTTP mirror.
+  Browse GitHub repository contents via a Cloudflare Worker HTTP mirror.
   Use this skill whenever the user wants to list files in a GitHub repo, read file contents from GitHub,
   explore a repository's directory structure, or fetch a specific file from GitHub -- all without cloning.
   Also use when the user mentions "github-llm", "github mirror", or provides GitHub URLs they want to inspect.
@@ -14,13 +14,25 @@ description: >-
 
 # GitHub LLM Worker
 
-A Cloudflare Worker that mirrors GitHub repository paths under its own origin. Use it to browse repo contents and fetch files via simple HTTP requests -- no cloning, no CLI, no `gh` auth setup.
+A Cloudflare Worker that mirrors GitHub repository paths. Browse repo contents and fetch files via simple GET requests -- no cloning, no CLI, no auth.
 
-**Worker origin:** `https://github-llm.pobomp.workers.dev`
+**Base URL:** `https://github-llm.pobomp.workers.dev`
 
-## How It Works
+## URL Pattern
 
-Take any GitHub URL and replace `https://github.com` with the worker origin. Keep the path unchanged.
+All requests are GET. Replace `https://github.com` with the base URL -- keep the path unchanged.
+
+```
+{base}/owner/repo                         -> repo root listing (HTML)
+{base}/owner/repo/tree/{ref}/{path...}    -> directory listing (HTML)
+{base}/owner/repo/blob/{ref}/{path...}    -> raw file contents
+```
+
+The conversion rule:
+
+```
+worker_url = github_url.replace("https://github.com", "https://github-llm.pobomp.workers.dev")
+```
 
 | GitHub URL | Worker URL |
 |---|---|
@@ -28,63 +40,57 @@ Take any GitHub URL and replace `https://github.com` with the worker origin. Kee
 | `https://github.com/owner/repo/tree/main/src` | `https://github-llm.pobomp.workers.dev/owner/repo/tree/main/src` |
 | `https://github.com/owner/repo/blob/main/README.md` | `https://github-llm.pobomp.workers.dev/owner/repo/blob/main/README.md` |
 
-## URL Pattern
+## Usage by Environment
 
+### Web / Mobile Chat Apps (no shell access)
+
+If you only have a built-in web fetch tool (e.g. `web_reader`, `browser`, `fetch`, `url_fetch`):
+
+1. **Construct the GET URL** using the pattern above
+2. **Fetch it** with whatever built-in tool your platform provides
+3. Directory listings return minimal HTML (`<pre>` with links) -- parse or read as-is
+4. File (blob) paths return raw content directly
+
+Example -- read a file:
 ```
-https://github-llm.pobomp.workers.dev/{owner}/{repo}/tree/{ref}/{path...}  -> directory listing (HTML)
-https://github-llm.pobomp.workers.dev/{owner}/{repo}/blob/{ref}/{path...}  -> raw file contents
-https://github-llm.pobomp.workers.dev/{owner}/{repo}                       -> repo root listing (HTML)
+Fetch: https://github-llm.pobomp.workers.dev/anthropics/anthropic-cookbook/blob/main/README.md
 ```
 
-The conversion rule is straightforward -- this is all an LLM needs:
-
+Example -- list a directory:
 ```
-worker_url = github_url.replace("https://github.com", "https://github-llm.pobomp.workers.dev")
+Fetch: https://github-llm.pobomp.workers.dev/anthropics/anthropic-cookbook/tree/main/misc
 ```
 
-## When to Use This vs gh-llm CLI
+No curl, no shell, no POST -- just GET the URL.
 
-| Aspect | This Worker | gh-llm CLI |
-|---|---|---|
-| Access method | HTTP fetch (curl, fetch, web_reader) | Shell commands |
-| Best for | Remote/sandboxed environments, any tool that speaks HTTP | Local terminals with shell access |
-| Output format | HTML directory listings, raw file bytes | Formatted tables, raw stdout |
+### CLI Coding Agents (shell access)
 
-If you have shell access and `gh-llm` is installed, the CLI may be more convenient. If you're in a sandboxed environment, working over HTTP, or the CLI isn't available, use this worker.
-
-## Workflow
-
-### 1. List repository contents
-
-Fetch the repo root or a subdirectory to see what's there. Directory requests return HTML with a `<pre>` block containing links.
+With shell access you get more flexibility: pipe, save to files, chain commands.
 
 ```bash
-# Repo root (uses default branch)
+# List repo root
 curl -s https://github-llm.pobomp.workers.dev/owner/repo
 
-# Specific branch/directory
-curl -s https://github-llm.pobomp.workers.dev/owner/repo/tree/main/src
-```
-
-Or use `mcp__web_reader__webReader` / `WebFetch` to fetch and parse the HTML directory listing.
-
-### 2. Read a file
-
-Blob paths return raw file content, same as `raw.githubusercontent.com`.
-
-```bash
+# Read a file
 curl -s https://github-llm.pobomp.workers.dev/owner/repo/blob/main/README.md
+
+# Save large file locally
+curl -s https://github-llm.pobomp.workers.dev/owner/repo/blob/main/src/main.rs > /tmp/main.rs
 ```
 
-### 3. Explore incrementally
+Or use `WebFetch` / `mcp__web_reader__webReader` if available in your agent toolkit.
 
-Start from the root, identify directories of interest from the listing, then drill in. Follow links from the HTML listing or construct URLs by hand.
+## Workflow: Incremental Exploration
 
-## Tips
+1. Start from the repo root URL to get the top-level listing
+2. Identify directories of interest from the listing
+3. Append `/tree/{ref}/{dir}` to drill into subdirectories
+4. Switch to `/blob/{ref}/{file}` to read specific files
 
-- Branch and tag names containing `/` are supported -- the worker resolves the ref vs path boundary automatically.
-- `GET` and `HEAD` methods only. Other methods return 405.
-- Public repos work without authentication (rate limited to 60 req/hr). The worker owner can configure a `GITHUB_TOKEN` for higher limits and private repo access.
-- The worker uses the GitHub Contents API for metadata and `raw.githubusercontent.com` for file bytes. It does not scrape GitHub HTML pages.
-- When fetching directory listings, the HTML output is minimal -- a `<pre>` block with links. Parse it accordingly; don't expect a full HTML page with semantic markup.
-- For large files or binary content, the worker proxies directly from GitHub's CDN, so transfer is efficient.
+## Notes
+
+- **GET and HEAD only.** Other methods return 405.
+- Branch/tag names containing `/` are supported -- the worker resolves ref vs path automatically.
+- Public repos work without auth (rate limited to 60 req/hr). The worker owner can configure a `GITHUB_TOKEN` for higher limits and private repo access.
+- Directory listings are minimal HTML (`<pre>` block with links), not full pages.
+- File content is proxied from GitHub's CDN -- efficient for large/binary files.
