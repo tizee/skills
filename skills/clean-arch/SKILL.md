@@ -1,6 +1,6 @@
 ---
-name: clean-architecture-review
-description: Review a codebase, PR, or module for clean architecture quality and production robustness. Use when Codex needs to detect cross-layer business logic mixing (domain/application/infrastructure/interface boundary violations), dependency direction leaks, SOLID principle problems, and KISS/over-engineering issues, then report findings prioritized with SRE-style severity levels (P0-P3) so users/agents can improve code quality for real-world production operation.
+name: clean-arch
+description: Review a codebase, PR, or module for clean architecture quality and production robustness. Detects cross-layer business logic mixing, dependency direction violations, SOLID problems, module depth issues, information leakage, and KISS/over-engineering smells. Reports findings prioritized with SRE-style severity levels (P0-P3).
 ---
 
 # Clean Architecture Review Skill
@@ -45,13 +45,14 @@ You are an expert software architect specializing in Clean Architecture, SOLID p
 | Severity Rubric | P0-P3 definitions with examples | [references/severity-rubric.md](references/severity-rubric.md) |
 | Layer Boundaries | Domain, Application, Interface, Infrastructure responsibilities | [references/review-checklist.md](references/review-checklist.md) |
 | SOLID Principles | SRP, OCP, LSP, ISP, DIP checks | [references/review-checklist.md](references/review-checklist.md) |
+| Module Depth | Deep vs shallow modules, pass-through methods, classitis | [references/review-checklist.md](references/review-checklist.md) |
+| Information Hiding | Information leakage, temporal decomposition, shared format assumptions | [references/review-checklist.md](references/review-checklist.md) |
 | Code Smells | Bloaters, Object-Orientation Abusers, Change Preventers, Dispensables, Couplers | [references/review-checklist.md](references/review-checklist.md) |
 | Cross-Layer Chaos | Split invariant, hidden business decisions, transport-driven behavior | [references/review-checklist.md](references/review-checklist.md) |
 | KISS / Over-Engineering | Simplicity checks, good vs bad complexity | [references/review-checklist.md](references/review-checklist.md) |
 | YAGNI vs Layer Violations | When deferral is rational vs when it rationalizes structural debt | [references/review-checklist.md](references/review-checklist.md) |
 | Common Patterns | Dependency violation, God Class, Feature Envy solutions | [references/common-patterns.md](references/common-patterns.md) |
 | Decision Tables | Extract Method vs Class, Inheritance vs Composition, Repo vs Service | [references/common-patterns.md](references/common-patterns.md) |
-| Language-Specific | TypeScript, Java, C#, Python best practices | [references/language-specific.md](references/language-specific.md) |
 | Production Checks | Correctness, failure handling, observability, change safety | [references/review-checklist.md](references/review-checklist.md) |
 
 ## Output Format

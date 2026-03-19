@@ -7,6 +7,8 @@
 - Cross-layer business logic chaos patterns
 - YAGNI misapplication: deferring layer violations
 - SOLID review checks
+- Module depth checks (deep vs shallow)
+- Information hiding and leakage checks
 - KISS / over-engineering checks (from `kiss`)
 - Production robustness checks
 - Code smells quick reference
@@ -15,44 +17,7 @@
 
 ## Severity Rubric (`P0`..`P3`)
 
-Use production impact and recoverability, not personal preference.
-
-### `P0` Critical (production unsafe now)
-
-Use when the design can directly cause severe outages, security incidents, or irreversible data corruption, especially when hard to detect or recover.
-
-Typical examples:
-- Business invariants bypassed because logic is split across controller + repository + DB trigger in conflicting ways
-- Domain rules enforced only in one adapter path while other paths write data directly
-- Layer leakage causing secret handling, authorization, or tenant scoping to be skipped in some code paths
-- Retry + side effect design causing duplicate charges/orders without idempotency boundary
-
-### `P1` High (likely production incident or frequent breakage)
-
-Use when the architecture strongly increases probability of incidents, incorrect behavior, or unsafe changes.
-
-Typical examples:
-- Domain logic depends on infrastructure SDK/framework types, making behavior hard to test and change
-- Application/use-case layer contains transport-specific branching duplicated across endpoints/jobs
-- Repository implementations decide business outcomes instead of returning domain-relevant data
-- Cross-module circular dependencies that regularly force risky changes
-
-### `P2` Medium (maintainability and change-risk issue)
-
-Use when the system can run, but the design increases complexity, slows safe changes, or makes defects more likely.
-
-Typical examples:
-- SRP violations in services that combine orchestration, validation, persistence, and presentation mapping
-- Excess abstractions (interfaces/factories/strategies) with no current variation pressure
-- Inconsistent boundary ownership causing repeated logic duplication
-
-### `P3` Low (quality issue, limited near-term risk)
-
-Use when the issue is real but lower-impact, localized, or primarily readability/consistency with weak operational consequence.
-
-Typical examples:
-- Minor dependency direction inconsistency without current behavioral risk
-- Small KISS violations that do not yet affect correctness or operations
+See [severity-rubric.md](severity-rubric.md) for full definitions and examples.
 
 ## Layer Boundary Checks (Clean Architecture)
 
@@ -262,6 +227,72 @@ Flag dependency direction leaks:
 Also flag fake DIP:
 - Interface exists but concrete type is still constructed inside the use case, defeating inversion
 
+## Module Depth Checks (Deep vs Shallow)
+
+> Source: John Ousterhout, *A Philosophy of Software Design*
+
+A module's value is the ratio of functionality it hides to the complexity of its interface. **Deep modules** have simple interfaces and rich implementations. **Shallow modules** have interfaces nearly as complex as their implementations — they add abstraction cost without reducing what callers must know.
+
+### Shallow Module Red Flags
+
+- **Pass-through methods**: method does nothing except forward arguments to another method with a similar signature. The abstraction layer adds no value.
+- **Thin wrapper classes**: a class that wraps another class (or a library) and exposes the same interface with trivial additions. The wrapper is overhead, not simplification.
+- **One-line interface implementations**: an interface/protocol with 5+ methods where every implementation is a trivial delegation. The interface exists for "testability" but adds no behavioral abstraction.
+- **Classitis**: functionality split across many tiny classes/protocols where each does almost nothing. Callers must assemble and coordinate them, increasing cognitive load.
+
+### Deep Module Indicators (Good Design)
+
+- Interface exposes 2–5 operations; implementation handles edge cases, retries, caching, format negotiation internally
+- Callers don't need to know about implementation details to use the module correctly
+- The most common usage requires minimal parameters
+
+### Review Questions
+
+- Does this abstraction boundary **reduce** what the caller must know, or merely **relocate** it?
+- Would inlining this module into its caller make the code simpler without losing encapsulation?
+- Is the interface simpler than the implementation? If not, the module may be too shallow.
+
+### Severity
+
+- Shallow modules that cause **shotgun surgery** (changing one behavior requires touching many thin wrappers): P2
+- Pass-through methods that obscure control flow in critical paths: P2
+- Classitis that inflates codebase size without functional benefit: P3
+
+## Information Hiding and Leakage Checks
+
+> Source: John Ousterhout, *A Philosophy of Software Design* + David Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*
+
+Each module should encapsulate a **design decision** — data structures, algorithms, policies, formats — so that decision can change without rippling through the system. Information leakage occurs when the same design decision is reflected in multiple modules.
+
+### Information Leakage Red Flags
+
+- **Temporal decomposition**: modules split by execution order (read → parse → validate → write) instead of by the knowledge they encapsulate. Each step shares format/schema knowledge that should be in one place.
+- **Shared format assumptions**: two modules both know the wire format, file layout, or serialization schema. If the format changes, both must change.
+- **Back-channel coupling**: module A "knows" that module B stores data in a specific structure and reads it directly instead of going through B's interface.
+- **Leaked implementation types**: a module returns or accepts types that expose internal choices (e.g., returning a `SQLAlchemy.Row` from a repository, or accepting an `HTTPRequest` in a domain service).
+- **Config-driven behavior spread**: a configuration value is read in multiple modules that each interpret it independently, instead of one module interpreting it and exposing a semantic interface.
+
+### Versus Cross-Layer Chaos
+
+Cross-layer chaos (covered earlier) is about business logic escaping its proper layer. Information leakage is broader — it also occurs **within the same layer** when peer modules share knowledge they shouldn't. Both are dependency problems, but they require different detection strategies:
+
+| Pattern | Detection | Example |
+|---------|-----------|---------|
+| Cross-layer chaos | Domain import in wrong layer | Controller validates business rules |
+| Information leakage | Same knowledge in peer modules | Two services both parse the same CSV format |
+
+### Review Questions
+
+- If this internal data structure changed, how many modules would break?
+- Are peer modules coupled by shared knowledge of a format, protocol, or schema?
+- Could a new module be extracted that owns this knowledge exclusively?
+
+### Severity
+
+- Leakage of a **domain invariant** across modules (e.g., pricing formula duplicated in order service and invoice service): P1
+- Leakage of **format/protocol knowledge** across modules: P2
+- Leakage of **minor implementation details** with low change probability: P3
+
 ## KISS / Over-Engineering Checks (from `kiss`)
 
 Apply the `kiss` skill philosophy: manage complexity first.
@@ -346,49 +377,49 @@ The goal is to decide whether the codebase can operate safely in real production
 
 AI-generated code has characteristic failure modes distinct from human code smells. Use this checklist to catch patterns that LLM-authored code introduces systematically.
 
-- **重复代码类**
-  结构重复 (structural_duplication): near-identical blocks differing only by variable names — LLMs copy-paste across call sites instead of extracting;
-  骨架重复 (boilerplate_skeleton): scaffolding classes/interfaces generated "just in case" with no runtime path that exercises them
+- **Duplication (重复代码类)**
+  - Structural duplication (结构重复): near-identical blocks differing only by variable names — LLMs copy-paste across call sites instead of extracting
+  - Boilerplate skeleton (骨架重复): scaffolding classes/interfaces generated "just in case" with no runtime path that exercises them
 
-- **噪音代码类**
-  空函数体 (empty_function_body): methods with `pass` / `{}` / `throw NotImplemented` that were never filled in;
-  注释掉的代码 (commented_out_code): entire blocks left as `// old approach` with no explanation;
-  死分支 (dead_branch): `if False:` / `if (false) {` guards or version flags that can never be true;
-  不可达代码 (unreachable_code): statements after unconditional `return`/`throw`;
-  废话注释 (trivial_comment): `// increment i by 1` — restates code without adding intent;
-  过度注释 (excessive_comments): every line annotated, obscuring signal with noise;
-  未使用导入 (unused_import): imports added speculatively and never referenced;
-  残留样板 (leftover_boilerplate): `TODO: implement`, `YOUR_API_KEY_HERE`, placeholder strings shipped to production
+- **Noise Code (噪音代码类)**
+  - Empty function body (空函数体): methods with `pass` / `{}` / `throw NotImplemented` that were never filled in
+  - Commented-out code (注释掉的代码): entire blocks left as `// old approach` with no explanation
+  - Dead branch (死分支): `if False:` / `if (false) {` guards or version flags that can never be true
+  - Unreachable code (不可达代码): statements after unconditional `return`/`throw`
+  - Trivial comment (废话注释): `// increment i by 1` — restates code without adding intent
+  - Excessive comments (过度注释): every line annotated, obscuring signal with noise
+  - Unused import (未使用导入): imports added speculatively and never referenced
+  - Leftover boilerplate (残留样板): `TODO: implement`, `YOUR_API_KEY_HERE`, placeholder strings shipped to production
 
-- **过度防御类**
-  冗余类型检查 (redundant_type_check): `if isinstance(x, str) and isinstance(x, str)` / double null-guards on the same value in the same scope;
-  不必要默认值 (unnecessary_default): silently substituting `""` / `0` / `{}` for missing required config instead of raising at init — masks misconfiguration
+- **Excessive Defensiveness (过度防御类)**
+  - Redundant type check (冗余类型检查): `if isinstance(x, str) and isinstance(x, str)` / double null-guards on the same value in the same scope
+  - Unnecessary default (不必要默认值): silently substituting `""` / `0` / `{}` for missing required config instead of raising at init — masks misconfiguration
 
-- **错误处理类**
-  吞没异常 (swallowed_error): `except Exception: pass` or `catch (e) {}` — failures disappear silently;
-  过宽捕获 (broad_catch): catching `Exception`/`Throwable`/`Error` at a low level, then continuing as if nothing happened — converts hard faults into subtle corruption
+- **Error Handling (错误处理类)**
+  - Swallowed error (吞没异常): `except Exception: pass` or `catch (e) {}` — failures disappear silently
+  - Broad catch (过宽捕获): catching `Exception`/`Throwable`/`Error` at a low level, then continuing as if nothing happened — converts hard faults into subtle corruption
 
-- **类型系统逃逸类**
-  滥用 Any 类型 (any_type_escape): 明明有现成的类型声明（接口、类、枚举、Union 等），却用 `Any` / `object` / `unknown` 绕过类型检查——LLM 在不确定类型时倾向于用 Any 快速通过编译器，导致类型安全在边界处悄然失效；
-  强制类型断言 (unsafe_cast): 无条件 `as SomeType` / `(<T>value)` / `cast()` 而不验证实际运行时类型，将类型错误推迟到运行时
+- **Type System Escape (类型系统逃逸类)**
+  - Any-type escape (滥用 Any): using `Any` / `object` / `unknown` when concrete types or interfaces exist — LLMs default to `Any` when unsure about types, silently defeating type safety at boundaries
+  - Unsafe cast (强制类型断言): unconditional `as SomeType` / `(<T>value)` / `cast()` without verifying the actual runtime type, deferring type errors to runtime
 
-- **安全风险类**
-  硬编码凭证 (hardcoded_credential): API keys, passwords, tokens embedded in source;
-  注入风险 (injection_risk): unsanitised user input concatenated into SQL/shell/eval;
-  不安全反序列化 (unsafe_deserialization): `pickle.loads(user_data)` / `YAML.load` without safe loader;
-  弱加密算法 (weak_crypto): MD5/SHA1 for integrity, ECB mode, custom RNG seeded from time;
-  敏感数据日志泄露 (sensitive_data_log): passwords, tokens, PII written to structured logs or tracing spans
+- **Security Risk (安全风险类)**
+  - Hardcoded credential (硬编码凭证): API keys, passwords, tokens embedded in source
+  - Injection risk (注入风险): unsanitised user input concatenated into SQL/shell/eval
+  - Unsafe deserialization (不安全反序列化): `pickle.loads(user_data)` / `YAML.load` without safe loader
+  - Weak crypto (弱加密算法): MD5/SHA1 for integrity, ECB mode, custom RNG seeded from time
+  - Sensitive data in logs (敏感数据日志泄露): passwords, tokens, PII written to structured logs or tracing spans
 
 ### Severity Mapping for AI Smells
 
-| Category | Default Severity | Escalate to P0 when… |
+| Category | Default Severity | Escalate to P0 when... |
 |---|---|---|
-| 重复代码类 | P3 | duplication splits a business invariant across copies |
-| 噪音代码类 | P3 | leftover_boilerplate or dead_branch reaches production config/auth path |
-| 类型系统逃逸类 | P2 | unsafe_cast on data crossing a trust boundary (auth token, payment amount) |
-| 过度防御类 | P2 | unnecessary_default masks a required-but-missing secret |
-| 错误处理类 | P1 | swallowed_error in a payment, auth, or data-write path |
-| 安全风险类 | P0 | any hardcoded_credential, injection_risk, or unsafe_deserialization |
+| Duplication | P3 | duplication splits a business invariant across copies |
+| Noise Code | P3 | leftover_boilerplate or dead_branch reaches production config/auth path |
+| Type System Escape | P2 | unsafe_cast on data crossing a trust boundary (auth token, payment amount) |
+| Excessive Defensiveness | P2 | unnecessary_default masks a required-but-missing secret |
+| Error Handling | P1 | swallowed_error in a payment, auth, or data-write path |
+| Security Risk | P0 | any hardcoded_credential, injection_risk, or unsafe_deserialization |
 
 ## Code Smells Quick Reference
 
