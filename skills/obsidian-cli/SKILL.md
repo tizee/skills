@@ -90,6 +90,31 @@ obsidian create path="pages/My Note.md" content="..." overwrite silent
 
 To discover available templates: `obsidian templates`
 
+### Writing content with special characters (IMPORTANT)
+
+**Problem:** When passing `content="..."` directly, shell interprets special characters before the CLI sees them. Characters like `|`, `→`, `─`, `┌`, `└`, `│`, `▶`, `#` get treated as shell operators, causing:
+- ASCII art tables to be replaced with command output
+- Table cells to be truncated
+- Content to be partially executed as commands
+
+**Symptom:** You see command output like `ssh: connect to host...` or `Cloning into...` mixed into your note content.
+
+**Solution:** Write content to a temp file, then pass via `$(cat file)`:
+
+```bash
+# 1. Write content to temp file
+Write(file_path="/tmp/note-content.md", content="...\n---...\n")
+
+# 2. Pass content from file (shell won't interpret special chars)
+CONTENT=$(cat /tmp/note-content.md)
+obsidian vault="<vault>" create path="pages/My Note.md" overwrite content="$CONTENT" silent
+
+# 3. Clean up
+rm /tmp/note-content.md
+```
+
+**Why this works:** The `$(cat file)` substitution happens inside double quotes after the shell has already parsed the command structure, preserving the raw content.
+
 ### Properties (YAML frontmatter)
 
 Note frontmatter is YAML. `property:set` must use the correct `type=` to produce valid YAML for each property. Omitting `type=` defaults to plain text, which breaks structured fields.
