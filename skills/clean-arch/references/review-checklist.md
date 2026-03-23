@@ -365,6 +365,37 @@ The goal is to decide whether the codebase can operate safely in real production
 - **Never** share state between tests
 - **Always** test behavior, not implementation
 
+### Test Validity Heuristic
+
+The **deletion test**: if you delete the core logic of the function under test, does the test still pass? If yes, the test is decoration, not verification.
+
+Detection:
+- Assertions only check `toBeDefined()` / `not.toBeNull()` / `.toHaveLength(n)` without verifying actual business values
+- Test inputs are trivial (empty objects, zero values) that exercise no meaningful branch
+- No negative test cases — nothing checks that wrong inputs produce errors or wrong outputs are rejected
+
+Fix direction:
+- Assert concrete business results: `expect(result.totalAmount).toBe(900)`, `expect(result.status).toBe('confirmed')`
+- Include boundary cases and error paths
+- After writing a test, **delete the implementation body** and confirm the test fails — if it doesn't, the test is worthless
+
+### Bug Fix Testing Discipline (Red-Green)
+
+When fixing a bug, follow this order:
+
+1. **Write a reproducing test** that captures the buggy behavior
+2. **Run it and confirm it fails** (red) — this proves the test actually catches the bug
+3. **Fix the code**
+4. **Run it and confirm it passes** (green) — this proves the fix works
+
+The reverse order (fix first, add test after) is unreliable: you can never be sure the test would have caught the bug, because you never saw it fail. A test you've never seen fail is a test you can't trust.
+
+### Debug Log Discipline
+
+When debugging with inserted log/trace statements:
+- **Do not remove debug logs as part of a bug fix commit.** Debug logs are removed by the human after confirming the fix is correct, not by the AI alongside the fix.
+- Rationale: if the fix is wrong, the logs are gone too, and must be re-inserted for the next debugging round. Keep logs until the issue is confirmed resolved, then clean up in a separate pass.
+
 ## Reporting Heuristics
 
 - Findings first, sorted by severity.
@@ -399,6 +430,10 @@ AI-generated code has characteristic failure modes distinct from human code smel
   - Swallowed error (吞没异常): `except Exception: pass` or `catch (e) {}` — failures disappear silently
   - Broad catch (过宽捕获): catching `Exception`/`Throwable`/`Error` at a low level, then continuing as if nothing happened — converts hard faults into subtle corruption
 
+- **Test Fabrication (测试拟合类)**
+  - Hardcoded lookup (硬编码拟合): AI doesn't understand the logic, so it hardcodes return values that match test inputs — tests pass, but logic is a lookup table, not an implementation. Example: `if (amount === 1000 && level === 'gold') return 100;` instead of `return amount * discountRate(level);`
+  - Vacuous assertion (空洞断言): test only checks `toBeDefined()` / `not.toBeNull()` / `toHaveLength` without verifying business-meaningful values — test cannot distinguish correct behavior from any non-null garbage
+
 - **Type System Escape (类型系统逃逸类)**
   - Any-type escape (滥用 Any): using `Any` / `object` / `unknown` when concrete types or interfaces exist — LLMs default to `Any` when unsure about types, silently defeating type safety at boundaries
   - Unsafe cast (强制类型断言): unconditional `as SomeType` / `(<T>value)` / `cast()` without verifying the actual runtime type, deferring type errors to runtime
@@ -419,6 +454,7 @@ AI-generated code has characteristic failure modes distinct from human code smel
 | Type System Escape | P2 | unsafe_cast on data crossing a trust boundary (auth token, payment amount) |
 | Excessive Defensiveness | P2 | unnecessary_default masks a required-but-missing secret |
 | Error Handling | P1 | swallowed_error in a payment, auth, or data-write path |
+| Test Fabrication | P1 | hardcoded_lookup on core business logic (pricing, auth, state transitions) |
 | Security Risk | P0 | any hardcoded_credential, injection_risk, or unsafe_deserialization |
 
 ## Code Smells Quick Reference

@@ -51,6 +51,8 @@ You are an expert software architect specializing in Clean Architecture, SOLID p
 | Cross-Layer Chaos | Split invariant, hidden business decisions, transport-driven behavior | [references/review-checklist.md](references/review-checklist.md) |
 | KISS / Over-Engineering | Simplicity checks, good vs bad complexity | [references/review-checklist.md](references/review-checklist.md) |
 | YAGNI vs Layer Violations | When deferral is rational vs when it rationalizes structural debt | [references/review-checklist.md](references/review-checklist.md) |
+| AI Test Fabrication | Hardcoded lookup, vacuous assertions, deletion test heuristic | [references/review-checklist.md](references/review-checklist.md) |
+| Bug Fix Testing | Red-green discipline, debug log retention policy | [references/review-checklist.md](references/review-checklist.md) |
 | Common Patterns | Dependency violation, God Class, Feature Envy solutions | [references/common-patterns.md](references/common-patterns.md) |
 | Decision Tables | Extract Method vs Class, Inheritance vs Composition, Repo vs Service | [references/common-patterns.md](references/common-patterns.md) |
 | Production Checks | Correctness, failure handling, observability, change safety | [references/review-checklist.md](references/review-checklist.md) |
