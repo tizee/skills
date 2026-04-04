@@ -77,6 +77,56 @@ impl Config {
 }
 ```
 
+## Anti-Pattern: Stringly-Typed APIs
+
+```rust
+// Caller can pass any string, including typos. Fails at runtime.
+pub fn set_log_level(level: &str) { /* ... */ }
+set_log_level("degub"); // compiles, panics at runtime
+```
+
+## Positive Pattern: Enum-Typed APIs
+
+```rust
+pub enum LogLevel { Debug, Info, Warn, Error }
+pub fn set_log_level(level: LogLevel) { /* ... */ }
+// set_log_level(LogLevel::Degub); // compile error -- caught immediately
+```
+
+Use enums for any parameter with a fixed set of valid values. This eliminates an entire class of typo-driven bugs and gives callers IDE autocomplete.
+
+## Anti-Pattern: Boolean Parameter Trap
+
+```rust
+// What do these booleans mean? Unreadable at the call site.
+connect("host", true, false, true);
+```
+
+## Positive Pattern: Enums or Builder for Clarity
+
+```rust
+pub enum Compression { Enabled, Disabled }
+pub enum Tls { Required, Optional }
+
+connect("host", Compression::Enabled, Tls::Required);
+// Or use a builder for many options:
+Connection::builder().host("host").compression(true).tls(true).build();
+```
+
+## Anti-Pattern: Deref as Inheritance
+
+```rust
+// Using Deref to simulate OOP inheritance -- confusing.
+use std::ops::Deref;
+struct Admin { user: User }
+impl Deref for Admin {
+    type Target = User;
+    fn deref(&self) -> &User { &self.user }
+}
+```
+
+`Deref` should only be used for smart pointer types. For code reuse, prefer composition with explicit delegation or traits for shared behavior.
+
 ## Object Safety
 
 If a trait is intended for dynamic dispatch (`dyn Trait`), ensure it is object-safe:
@@ -86,3 +136,24 @@ If a trait is intended for dynamic dispatch (`dyn Trait`), ensure it is object-s
 - No associated constants or types with defaults that reference `Self`.
 
 Mark non-object-safe methods with `where Self: Sized` so the trait can still be used as `dyn Trait` for the remaining methods.
+
+## Sealed Traits
+
+Seal a trait to prevent external implementations, allowing future additions without breaking changes:
+
+```rust
+mod private {
+    pub trait Sealed {}
+}
+
+pub trait MyTrait: private::Sealed {
+    fn method(&self);
+}
+
+// Only types in this crate can implement MyTrait.
+```
+
+## Semver Awareness
+
+- Use `cargo-semver-checks` to verify that changes don't accidentally break the public API.
+- `#[non_exhaustive]` on public enums and structs allows adding variants/fields in minor versions without breaking downstream code.

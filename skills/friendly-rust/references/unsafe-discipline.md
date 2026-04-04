@@ -85,3 +85,37 @@ Use crate-level attributes to enforce documentation discipline:
 ```
 
 httparse is a good real-world model of this approach: strict lint denial at crate root, unsafe contained in a submodule with documented invariants.
+
+## Challenge Unsafe Before Writing It
+
+Research suggests 77% of `unsafe` usage stems from unawareness of safe alternatives. Before writing unsafe, exhaust these options:
+
+- Restructure code to satisfy the borrow checker.
+- Use interior mutability (`RefCell`, `Cell`, `Mutex`) when compile-time checking is too restrictive.
+- Use `Rc`/`Arc` for shared ownership instead of raw pointers.
+- Check if a safe abstraction exists in `std` or a well-vetted crate.
+
+Only 23% of developers report being always certain their unsafe encapsulation is correct. When unsafe is unavoidable, require thorough testing, multiple review rounds, and Miri validation.
+
+## Miri for Unsafe Validation
+
+Miri interprets Rust's MIR to detect undefined behavior at runtime: use-after-free, data races, stacked borrows violations, invalid pointer operations. It runs slower than native execution but catches UB that tests alone miss.
+
+```bash
+# Run tests under Miri
+cargo +nightly miri test
+
+# Run a specific binary
+cargo +nightly miri run
+```
+
+Integrate Miri into CI for any crate containing `unsafe` blocks. It is the closest thing to a soundness proof you can get without formal verification.
+
+## FFI and Raw Pointers
+
+When bridging to C via FFI:
+
+- **Check raw pointers for null before dereference.** Use `as_ref()` / `as_mut()` which return `Option`, forcing explicit null handling.
+- **Document lifetime expectations across the FFI boundary.** C does not track lifetimes; the Rust side must enforce them.
+- **Use `CStr` / `CString` for string interop.** Never assume a C `char*` is valid UTF-8.
+- **Wrap FFI types in safe Rust abstractions** with proper `Drop` implementations for cleanup.

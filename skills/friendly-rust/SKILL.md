@@ -37,6 +37,9 @@ Concise guidance for writing Rust code that is correct, idiomatic, and pleasant 
 | Async & Concurrency | Send/Sync contracts, spawn_blocking, cancellation, waker correctness | [references/async-concurrency.md](references/async-concurrency.md) |
 | API Design | Trait conventions, builders, visibility, rustdoc, standard trait impls | [references/api-design.md](references/api-design.md) |
 | Performance & Profiling | Measure-first profiling, Criterion benchmarks, PGO workflow | [references/performance-profiling.md](references/performance-profiling.md) |
+| Type Patterns | Newtypes, phantom types, typestate, const generics, sealed traits | [references/type-patterns.md](references/type-patterns.md) |
+| Testing | Unit tests, property-based testing, mocking, fuzzing, Miri, coverage | [references/testing.md](references/testing.md) |
+| Macros | Declarative vs proc macros, when to use, hygiene, debugging | [references/macros.md](references/macros.md) |
 | Build & Dependencies | Compile time, cargo features, workspace layout, security audits | [references/build-dependencies.md](references/build-dependencies.md) |
 | Review | Quick-reference checklist covering all topics | [references/review-checklist.md](references/review-checklist.md) |
 

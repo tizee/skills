@@ -60,8 +60,26 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 - Are Cargo features additive and documented?
 - Are new dependencies justified? Check maintenance status and transitive dependency count.
 
+## Type Safety
+
+- Are there stringly-typed APIs where an enum would be safer?
+- Are boolean parameters unreadable at call sites? (Consider enums or builder.)
+- Are newtypes used for domain-specific quantities (e.g., `Meters` vs raw `f64`)?
+- Is `Deref` used only for smart pointers, not for simulating inheritance?
+- Could phantom types or typestate encode invalid state transitions at compile time?
+
+## Testing
+
+- Do unit tests exist for core logic? Are edge cases covered?
+- Is property-based testing (proptest) used for invariant-heavy code?
+- Is `cargo fuzz` set up for parsers or code handling untrusted input?
+- Is Miri in CI for crates with `unsafe` blocks?
+- Do integration tests use only the public API?
+
 ## Documentation
 
 - Do doc examples use `?` instead of `unwrap()`?
 - Is `#![deny(missing_docs)]` enabled for libraries?
 - Are crate-level docs present with a usage example?
+- Do `// SAFETY:` comments explain why, not just what?
+- Are sealed traits and `#[non_exhaustive]` used where future additions are expected?

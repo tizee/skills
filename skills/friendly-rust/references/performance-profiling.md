@@ -99,3 +99,46 @@ fn bench_sum(c: &mut Criterion) {
 criterion_group!(benches, bench_sum);
 criterion_main!(benches);
 ```
+
+## Anti-Pattern: Eager Collection When Lazy Suffices
+
+```rust
+// Forces allocation of an intermediate Vec.
+let names: Vec<String> = users.iter().map(|u| u.name.clone()).collect();
+let filtered: Vec<&String> = names.iter().filter(|n| n.starts_with("A")).collect();
+```
+
+Prefer chaining iterators lazily -- each element flows through all operations without intermediate allocation:
+
+```rust
+let filtered: Vec<&str> = users.iter()
+    .map(|u| u.name.as_str())
+    .filter(|n| n.starts_with("A"))
+    .collect();
+```
+
+## Semantic Methods Over Index Arithmetic
+
+Prefer `first()`, `last()`, `split_first()` over `get(0)`, `get(len - 1)`. Semantic methods communicate intent and handle empty cases correctly.
+
+## Flamegraph Quick Start
+
+```bash
+cargo install flamegraph
+cargo flamegraph --bin myapp
+# Opens an SVG flamegraph showing hot paths.
+```
+
+For deterministic benchmarking (cache-aware), `iai` uses Cachegrind under the hood and produces measurements immune to system load variation.
+
+## Fuzzing for Parsers and Protocol Code
+
+Performance-sensitive code that handles untrusted input should also be fuzzed:
+
+```bash
+cargo install cargo-fuzz
+cargo fuzz init
+cargo fuzz run my_target
+```
+
+Fuzzing finds both crashes and performance pathologies (inputs that cause quadratic behavior).
