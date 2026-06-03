@@ -50,7 +50,9 @@ Before writing, separate what is **durable** from what is **incidental**. This i
 | Decision/data flow shape | Parameter signatures |
 | State transitions and their guarantees | Test counts, line numbers as facts |
 
-Reason: you are documenting a project you do not control. Implementation-shaped claims ("a 14-field struct", "calls `doFooBar()`") rot the moment upstream refactors. Contract-shaped claims ("the buffer must be flushed before the lock releases") survive. Reference implementation details by pointing at the code (`see foo.py:120`), not by transcribing them as if they were the contract.
+Reason: you are documenting a project you do not control. Implementation-shaped claims ("a 14-field struct", "calls `doFooBar()`") rot the moment upstream refactors. Contract-shaped claims ("the buffer must be flushed before the lock releases") survive. Reference implementation details by pointing at the code, not by transcribing them as if they were the contract.
+
+**Citation granularity — cite symbols, not line ranges.** When grounding a claim, anchor it to a durable locator: a file plus a function/type/symbol name (`dispatch()` in `rpc.lua`, `M.connect`), because names survive edits that line numbers do not. Exact line numbers drift on every insertion above them, so a doc full of `foo.lua:198–210` is wrong within one refactor. If a line number genuinely helps a reader jump to a spot, treat it as an approximate hint (`rpc.lua` around L200, in the socket read loop) and never as the proof of a contract. The proof is the named symbol and the behavior, not the line.
 
 ### 4. Write the doc
 
@@ -212,6 +214,7 @@ Rules:
 - Keep width under ~75 columns so it does not wrap in narrow terminals.
 - Label edges when the branch condition matters (`--(timeout)-->`).
 - The diagram must reflect the *real* path you traced, not an idealized one.
+- **Prefer several small, single-purpose diagrams over one mega-diagram.** A box that nests a full decision tree inside a transport-routing layout becomes an unreadable tangle of crossing lines. If a diagram needs more than ~12 rows or has lines that cross, split it: one diagram for the top-level data flow, a separate one for the decision logic, another for a key sub-mechanism. Each diagram should answer exactly one question ("how does a message get routed?", "what happens on a cache miss?"). Clarity beats completeness — a reader learns more from three legible pictures than one exhaustive one.
 
 ## Principles
 
