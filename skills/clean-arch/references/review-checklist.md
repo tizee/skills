@@ -10,6 +10,9 @@
 - Module depth checks (deep vs shallow)
 - Information hiding and leakage checks
 - KISS / over-engineering checks (from `kiss`)
+- DRY / PIE / SLAP checks
+- Orthogonality and reversibility checks
+- Action habits and risk laws
 - Production robustness checks
 - Code smells quick reference
 - Testing best practices
@@ -319,6 +322,124 @@ Do not flag complexity if it clearly supports:
 - Fault isolation and retries with bounded semantics
 - Security boundaries and tenancy isolation
 - Observability needed for production debugging
+
+## DRY / PIE / SLAP Checks
+
+These three principles target *readability and change-cost at the function and module level*. They are distinct from layer boundaries (structural) and from KISS (whole-design simplicity).
+
+### DRY — Don't Repeat Yourself (Knowledge, Not Text)
+
+DRY is about **duplicated knowledge**, not duplicated characters. A piece of knowledge is a single authoritative statement of a rule, format, or policy.
+
+Flag when:
+
+- The same business rule (tax formula, eligibility check, status transition) is implemented in two or more places, so a change must be made in lockstep.
+- The same wire format / schema / magic constant is hardcoded in multiple modules.
+- A validation that defines a contract is copy-pasted across entrypoints.
+
+Do **not** flag when:
+
+- Two blocks merely *look* similar but encode independent decisions that may diverge later. Coupling them creates a false abstraction.
+- Removing the duplication would require a confusing parameterized helper that obscures both call sites (DRY losing to KISS).
+
+Detection heuristic: *"If this rule changed, how many places must change together, and would a developer reliably find all of them?"* If the answer is "several, and easy to miss" — it is a DRY violation. If it's "two, but they may legitimately diverge" — leave it.
+
+Severity:
+
+- Duplicated **domain invariant** (pricing, auth, state transition): P1
+- Duplicated **format/protocol/constant**: P2
+- Duplicated boilerplate with low change probability: P3
+
+### PIE — Program Intent Explicitly
+
+Code should make *what* it does and *why* obvious without forcing the reader to reverse-engineer the body.
+
+Flag when:
+
+- Magic numbers/strings encode a rule with no name (`if status == 3` instead of `if status == OrderStatus.SHIPPED`).
+- Boolean parameters force the caller to guess meaning (`create(true, false)`); prefer named enums/options.
+- A clever one-liner compresses several decisions into an unreadable expression.
+- Control flow relies on side effects whose purpose is undocumented and non-obvious.
+- A comment explains *what* the code does (noise) instead of *why* a non-obvious choice was made (signal).
+
+Fix direction: introduce named constants/enums, extract intention-revealing helper functions, replace boolean flags with named options, and reserve comments for rationale.
+
+Severity: usually P3; escalate to P2 when the hidden intent governs a correctness-critical branch (auth, money, data writes).
+
+### SLAP — Single Level of Abstraction per Function
+
+Each function should operate at one level of abstraction. High-level policy and low-level mechanics should not be interleaved in the same body.
+
+Flag when:
+
+- A function mixes orchestration (`processOrder()`) with raw byte/SQL/string manipulation in the same scope.
+- Reading top-to-bottom forces the reader to "zoom" between strategy and implementation detail repeatedly.
+- A long method has clearly separable phases that each deserve a named sub-function.
+
+Fix direction: extract lower-level steps into named helpers so the parent function reads as a sequence of intent-level steps. This is the "compose method" pattern.
+
+SLAP vs Long Method: Long Method is about *size*; SLAP is about *mixed altitude*. A 12-line function can still violate SLAP if it jumps abstraction levels; a 25-line function can be fine if it stays at one level.
+
+Severity: P2 when it obscures a critical path; P3 otherwise.
+
+## Orthogonality and Reversibility Checks
+
+> Source: Hunt & Thomas, *The Pragmatic Programmer*
+
+### Orthogonality
+
+Orthogonal components are independent: changing one does not affect the others. Orthogonality is the design property that makes high cohesion / low coupling *measurable*.
+
+Flag when:
+
+- A change to one feature unexpectedly breaks an unrelated feature (signals hidden coupling).
+- Two modules must always be modified together despite serving different concerns.
+- A "shared utility" accumulates unrelated responsibilities, becoming a coupling hub.
+- Global/singleton mutable state forces implicit coordination between otherwise independent code.
+
+Review question: *"If I change this component, what else do I have to touch or re-test?"* A long, surprising answer indicates low orthogonality.
+
+Severity: P1 when a single change forces edits across unrelated modules (entangled blast radius); P2 for localized entanglement.
+
+### Reversibility
+
+Good architecture avoids "one-way door" decisions wherever the cost of being wrong is high. It keeps critical choices (database vendor, transport, third-party SDK) behind boundaries so they can be swapped.
+
+Flag when:
+
+- A vendor SDK or framework type is referenced directly throughout the codebase, making replacement a rewrite.
+- A schema/format decision is baked into many call sites with no migration seam.
+- Business logic assumes a specific deployment topology or storage engine.
+
+Nuance (avoid over-engineering): Not every decision needs reversibility. Demand it where the decision is *expensive to reverse and reasonably likely to change*. Wrapping a stable standard-library call behind a swappable port is speculative — flag *that* as over-engineering instead.
+
+Severity: P2 when an expensive, likely-to-change decision has no isolation seam; P3 for minor lock-in.
+
+## Action Habits and Risk Laws
+
+These are not per-line checks; they shape the *recommendations* a reviewer gives and the *narrative* of the Architecture Summary.
+
+### Action Habits (recommend these in fix directions)
+
+- **Boy Scout Rule**: Leave code cleaner than you found it. When a change touches a messy area, recommend a small, scoped cleanup — not a full rewrite. Use to justify low-cost P3 improvements adjacent to the change.
+- **Egoless programming**: Critique the code, not the author. Phrase findings as design risks and failure modes, never as personal judgment. (Enforced by the Evidence Rules in SKILL.md.)
+- **Small steps**: Prefer many small, verifiable changes over one large risky refactor. When recommending remediation, sequence it: smallest safe step first, strategic follow-up second.
+- **Clarity before optimization**: Do not accept complexity justified only by speculative performance. Recommend the clear version first; demand a measured bottleneck before endorsing an optimization that sacrifices readability.
+- **Automate and reuse**: Recommend automating repeated manual checks (lint rules, CI gates) when the same class of defect recurs.
+
+### Risk Laws (use to explain *why* a finding matters and to calibrate severity)
+
+- **Broken Windows**: Tolerated bad code invites more bad code. A small mess in a hot path tends to spread. Use this to escalate an otherwise-P3 smell when it sits in a high-traffic module others will copy.
+- **Entropy (software rot)**: Without active maintenance, structure decays. Frame accumulating debt findings in terms of trajectory, not just current state.
+- **Second-System Effect**: Rewrites and "v2" designs tend toward feature-bloat and over-engineering. When reviewing a redesign, watch for speculative generality and abstractions added "because we learned from v1."
+- **Yak Shaving**: A fix that drifts far from the original problem is a smell. Flag PRs whose scope wanders into unrelated refactors; recommend splitting them. Keep remediation aligned to the actual problem.
+
+### Organizational Context (NOT code findings)
+
+These laws operate at the team/org level. Do **not** raise them as code-review findings — they cannot be fixed by editing the code under review. Mention them only as context in the Architecture Summary when a structural pattern clearly reflects an org cause.
+
+- **Brooks's Law**: Adding people to a late project makes it later. Relevant only when discussing delivery risk, not code.
+- **Conway's Law**: System structure mirrors the communication structure of the org that built it. Useful for *explaining* why module boundaries fell where they did (e.g., a boundary that follows team lines rather than domain lines), but the remediation is organizational, not a code edit. Note it as an observation, never as a P0-P3 finding.
 
 ## Production Robustness Checks
 
