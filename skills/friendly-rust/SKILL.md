@@ -22,9 +22,12 @@ Concise guidance for writing Rust code that is correct, idiomatic, and pleasant 
 
 ## Workflow
 
-1. Locate the relevant topic below.
-2. Apply the guidance and compare against anti-pattern / positive-pattern examples.
-3. Review against [references/review-checklist.md](references/review-checklist.md).
+> **MANDATORY FIRST STEP:** When reviewing Rust code, read [references/review-checklist.md](references/review-checklist.md) in full before producing any review. Then read the topic-specific reference file(s) relevant to the change (see Topics table below). Do not review from memory — the reference files are the source of truth.
+
+1. Read [references/review-checklist.md](references/review-checklist.md) (mandatory for any review).
+2. Locate the relevant topic below and read its linked reference file.
+3. Apply the guidance and compare against anti-pattern / positive-pattern examples.
+4. Confirm the change against every applicable checklist item before reporting.
 
 ## Topics
 

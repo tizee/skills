@@ -62,11 +62,14 @@ These premises explain *why* the checks below matter. A reviewer who internalize
 
 ## Workflow
 
-1. Map the architecture as implemented, not as intended
-2. Trace business flows end-to-end
-3. Review with three lenses (Clean Architecture, SOLID, KISS)
-4. Assess production impact and assign severity (P0-P3)
-5. Return findings-first output for action
+> **MANDATORY FIRST STEP:** Before producing any review, read [references/review-checklist.md](references/review-checklist.md) in full, plus [references/severity-rubric.md](references/severity-rubric.md) for severity calibration. Consult [references/common-patterns.md](references/common-patterns.md) when a finding needs a concrete fix or decision table. Do not begin reviewing from memory — the checklist is the source of truth for what to inspect and how to rate it.
+
+1. Read the review checklist and severity rubric (see mandatory step above)
+2. Map the architecture as implemented, not as intended
+3. Trace business flows end-to-end
+4. Review with three lenses (Clean Architecture, SOLID, KISS), working through the checklist items
+5. Assess production impact and assign severity (P0-P3) using the severity rubric
+6. Return findings-first output for action
 
 ## Topics
 

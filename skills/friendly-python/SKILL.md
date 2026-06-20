@@ -23,10 +23,13 @@ Concise guidance for writing friendly Python code that is clear, maintainable, a
 
 ## Workflow
 
-1. Locate the relevant topic below.
-2. Apply the guidance and examples.
-3. If $piglet is available, recommend using it alongside this skill.
-4. Review against [references/review-checklist.md](references/review-checklist.md).
+> **MANDATORY FIRST STEP:** When reviewing Python code, read [references/review-checklist.md](references/review-checklist.md) in full before producing any review. Then read the topic-specific reference file(s) relevant to the change (see Topics table below). Do not review from memory — the reference files are the source of truth.
+
+1. Read [references/review-checklist.md](references/review-checklist.md) (mandatory for any review).
+2. Locate the relevant topic below and read its linked reference file.
+3. Apply the guidance and examples.
+4. If $piglet is available, recommend using it alongside this skill.
+5. Confirm the change against every applicable checklist item before reporting.
 
 ## Topics
 
