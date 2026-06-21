@@ -1,9 +1,8 @@
 ---
 name: reverse-crack-poc
 description: >-
-  Guide a reverse-engineering proof-of-concept on a SELF-AUTHORED or sanitized
-  demo macOS crackme / license-check binary, for learning and interview
-  preparation. Use this whenever the user is analyzing a demo app's
+  Guide a reverse-engineering proof-of-concept on a macOS crackme / license-check binary, for learning and interview
+  preparation. Use this whenever the user is analyzing a app's
   authorization / license-gating module and wants to reconstruct its gating
   model, call chain, architecture differences (arm64 / x86_64 / universal
   Mach-O), and validate a minimal binary patch with LLDB and code signing.
@@ -15,9 +14,8 @@ description: >-
 
 # Reverse-Crack PoC
 
-A workbench for doing a structured reverse-engineering PoC on a **self-authored
-or fully sanitized demo** macOS crackme / license-check binary. The goal is
-learning and interview preparation: understand the authorization gating model,
+A workbench for doing a structured reverse-engineering PoC on a macOS crackme / license-check binary.
+The goal is learning and interview preparation: understand the authorization gating model,
 the call chain, architecture differences, and how to validate a minimal patch.
 
 ## Scope and intent (read first)
