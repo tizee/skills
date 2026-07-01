@@ -85,3 +85,17 @@ skills/
 Skills are loaded on demand by referencing the skill name. Each `SKILL.md` contains a YAML frontmatter block with `name` and `description` fields used for routing, plus the full workflow instructions for the agent.
 
 Skills marked with `context: fork` run in an isolated subagent context — pass relevant file paths or change descriptions via `arguments` so the subagent has the context it needs.
+
+## Git hooks
+
+A `pre-commit` hook lints staged `SKILL.md` files with the `skill-lint` validator, blocking commits whose frontmatter would fail to load (the most common cause of a skill silently "vanishing"). The hooks live in `.githooks/`.
+
+Because `core.hooksPath` is not merged by git, a repo-local `core.hooksPath` would otherwise disable the global hooks (git-lfs, secret scan, `prepare-commit-msg`). To avoid that, `.githooks/` uses a generic forwarder (`_forward`): each hook is a symlink that first runs the same-named global hook, then adds repo-local behavior (skill-lint on `pre-commit`).
+
+`core.hooksPath` is a git config value and is not committed, so install the hooks once per clone:
+
+```bash
+bash .githooks/install-hooks.sh
+```
+
+This regenerates a forwarding stub for every current global hook and sets `core.hooksPath=.githooks`. Re-run it after adding a new global hook. Bypass the lint for a single commit with `SKIP_SKILL_LINT=1 git commit ...`.
