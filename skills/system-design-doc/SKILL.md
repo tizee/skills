@@ -1,6 +1,19 @@
 ---
 name: system-design-doc
-description: Analyze a software project's source code and write a grounded design/implementation document, author a new forward-looking design doc before writing code, or use the embedded principles as a guide for evaluating any design doc. Use this skill whenever the user wants to understand, learn, study, or document how a system/feature/subsystem is architected (e.g. "how does X work in this repo", "document the architecture of the Y subsystem", "reverse-engineer the Z system", "explain the design of feature W"), OR wants to plan and write a new design doc before implementation (e.g. "write a design doc for X", "draft a design for this feature", "I need a design doc to coordinate this work"), OR wants design-doc writing principles and a review checklist. Triggers on requests to analyze/learn from/document a system's internals, to plan a new system's design, or to review a design doc for completeness. Output follows a house format with ASCII/Unicode (or mermaid) flowcharts, a key-file index, behavioral contracts, and a BDD scenario table, validated against checklist.md.
+description: >-
+  Write a grounded design/implementation doc for existing code, author a
+  forward-looking design doc before code exists, or apply the embedded
+  principles/checklist to review any design doc. Use whenever the user wants to
+  understand, document, or reverse-engineer how a system, feature, or subsystem
+  is architected (e.g. "how does X work in this repo", "document the Y
+  subsystem", "reverse-engineer Z", "explain the design of W"), or wants to plan
+  and write a new design doc before implementation (e.g. "write a design doc for
+  X", "draft a design for this feature", "I need a design doc to coordinate this
+  work"), or wants design-doc writing principles and a review checklist. Triggers
+  on requests to analyze/document a system's internals, plan a new system's
+  design, or review a design doc for completeness. Output follows a house format:
+  prose + ASCII/Unicode/mermaid flowcharts, a key-file index, behavioral
+  contracts, and a BDD scenario table, validated against checklist.md.
 ---
 
 # System Design Doc

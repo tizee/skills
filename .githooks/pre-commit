@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook for the skills repo.
+#
+# This repo (a submodule of the dotfiles) overrides the global core.hooksPath
+# with a repo-local one so it can run skill-lint. To avoid silently dropping
+# the global checks (secret scan, clang-format), it first chains to the global
+# pre-commit hook, then lints any staged SKILL.md files.
+#
+# Bypass with:  SKIP_SKILL_LINT=1 git commit ...
+#
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+# 1) Chain to the global pre-commit so its checks are preserved even though
+#    this repo overrides core.hooksPath.
+global_hooks="$(git config --global core.hooksPath || true)"
+if [ -n "${global_hooks:-}" ]; then
+  global_hooks="${global_hooks/#\~/$HOME}"
+  if [ -x "$global_hooks/pre-commit" ]; then
+    "$global_hooks/pre-commit" "$@"
+  fi
+fi
+
+# 2) Lint staged SKILL.md files.
+if [ -n "${SKIP_SKILL_LINT:-}" ]; then
+  echo "skill-lint: skipped (SKIP_SKILL_LINT set)"
+  exit 0
+fi
+
+validator="$repo_root/skills/skill-lint/scripts/validate.py"
+if [ ! -f "$validator" ]; then
+  echo "skill-lint: validator not found at $validator; skipping" >&2
+  exit 0
+fi
+
+# Staged, added/copied/modified SKILL.md files (relative to repo root).
+staged_skills="$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '(^|/)SKILL\.md$' || true)"
+
+if [ -z "$staged_skills" ]; then
+  exit 0
+fi
+
+status=0
+while IFS= read -r skill_md; do
+  [ -z "$skill_md" ] && continue
+  skill_dir="$repo_root/$(dirname "$skill_md")"
+  if ! python3 "$validator" "$skill_dir"; then
+    status=1
+  fi
+done <<< "$staged_skills"
+
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "skill-lint: commit blocked by SKILL.md errors above." >&2
+  echo "Fix them, or bypass with SKIP_SKILL_LINT=1 git commit ..." >&2
+fi
+
+exit "$status"
