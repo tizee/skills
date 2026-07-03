@@ -62,6 +62,31 @@ GOPRIVATE=github.com/acme/*  # private modules bypass the public sum DB
 - Never build SQL, shell commands, or paths by string concatenation from user input -- use parameterized queries, `exec.Command` with separate args, and `filepath.Clean` + containment checks.
 - Keep secrets out of logs, errors, and source. Load them from the environment or a secrets manager, and refuse to start if a required secret is absent (fail loud, do not default).
 
+## Deserialization is a trust boundary
+
+A successful `json.Unmarshal` proves only that the bytes were syntactically valid JSON -- it proves nothing about the *values*. This is where "defensive gaps" live: code that works on every well-formed payload and corrupts state on the first malformed one. Treat decode-then-validate as a single, inseparable operation:
+
+- **The zero-value trap.** A missing field and an explicitly zero field decode identically (`0`, `""`, `false`, `nil`). If zero is not a legal value, validation must reject it; if "absent" and "zero" must be distinguished, use a pointer field and check for `nil`. Never let a missing `"amount"` silently become `0` and proceed.
+- **Reject unknown fields at strict boundaries.** For config files and internal APIs where a typo should fail loudly, use `json.Decoder` with `DisallowUnknownFields()` -- a misspelled key that silently deserializes into nothing is a config bug that ships.
+- **Validate after every decode, symmetrically with config.** The same `Validate()` discipline that guards config loading applies to every unmarshal of external data: ranges, enum membership, required fields, cross-field invariants. A decoded struct that has not been validated is untrusted memory in a convenient shape.
+- **State transitions are input too.** When a decoded message drives a state machine (session status, order lifecycle, guest/member roles), check that the transition is legal from the *current* state, not merely that the target state is a known constant. Most "only triggers on a specific weird state" bugs are missing transition guards.
+- **Fuzz the decoders.** Go's built-in fuzzing (`go test -fuzz`) is purpose-built for exactly this: feed the parser hostile bytes until it panics, hangs, or accepts what it should reject. Any hand-written parser or custom `UnmarshalJSON` deserves a fuzz target.
+
+```go
+func decodeOrder(r io.Reader) (*Order, error) {
+    dec := json.NewDecoder(io.LimitReader(r, maxOrderBytes))
+    dec.DisallowUnknownFields()
+    var o Order
+    if err := dec.Decode(&o); err != nil {
+        return nil, fmt.Errorf("decode order: %w", err)
+    }
+    if err := o.Validate(); err != nil { // zero-value and range checks live here
+        return nil, fmt.Errorf("invalid order: %w", err)
+    }
+    return &o, nil
+}
+```
+
 ## Anti-Pattern
 
 Treating vulnerability scanning as advisory, and editing `go.sum` to make a build pass:

@@ -101,6 +101,30 @@ The payoff: dependency direction is legible at review time, infrastructure never
 - **Push interfaces to the consumer.** Define an interface in the package that *uses* it, not the package that implements it. This keeps the implementation package free of import dependencies and lets each consumer declare exactly the methods it needs.
 - **`pkg/` is not privileged.** Go gives no special meaning to `pkg/`; `internal/` is the one the toolchain enforces. If you do publish reusable code, put it under a single top-level directory (`pkg/` or a named SDK directory) and treat its API as a contract. Otherwise, default to `internal/`.
 
+## The two legitimate homes for an interface
+
+"Push interfaces to the consumer" is the default, but it is not the only sanctioned pattern. There are exactly two, and choosing between them is a design decision worth making explicitly:
+
+**1. Consumer-side interface (the default).** The package that *uses* a dependency declares the minimal interface it needs. Use this for business dependencies: a `billing` service that needs users declares its own two-method `UserStore`. Each consumer states its true requirements, implementations stay import-free, and mocks are trivial.
+
+**2. Provider-side interface in the parent, implementations in subpackages.** When a package's *purpose* is to define a pluggable contract with multiple interchangeable backends, the interface lives in the parent package and each implementation gets a subpackage. This is the `database/sql`/`driver` shape, and it is the right one for swappable infrastructure:
+
+```
+internal/storage/
+├── storage.go           # type Store interface { Get, Put, Delete }, shared errors
+├── postgres/            # package postgres: implements storage.Store
+├── s3/                  # package s3: implements storage.Store
+└── memory/              # package memory: in-memory Store for tests
+```
+
+Rules that keep this shape healthy:
+
+- The parent package contains the interface, shared sentinel errors (`storage.ErrNotFound`), and common option/config types -- **no implementation**. Subpackages import the parent, never each other, and never siblings.
+- Constructors return the concrete type (`postgres.New(...) *postgres.Store`), which satisfies `storage.Store` at the wiring site (`cmd/` or `internal/app/`). Verify the contract at compile time in each implementation: `var _ storage.Store = (*Store)(nil)`.
+- Consumers depend on `storage.Store` and stay ignorant of which subpackage is wired in.
+
+How to choose: if the interface answers "what does *this consumer* need?", define it consumer-side. If it answers "what must *any backend* provide?", define it provider-side in the parent with subpackage implementations. A codebase that applies both patterns in their right places -- and neither anywhere else -- is what "interface in the parent package, implementation in subpackages" discipline actually means.
+
 ## Anti-Pattern
 
 Layer-named packages forcing artificial imports and risking cycles:

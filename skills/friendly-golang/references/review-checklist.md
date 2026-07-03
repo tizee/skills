@@ -25,6 +25,15 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 - Is there a premature abstraction or interface with only one implementation and no test need?
 - Could a little duplication replace a confusing shared helper?
 
+## Source File Discipline
+
+- Are package-level `const`/`var` declarations grouped into single themed blocks near the top, not scattered between functions?
+- Does each `iota` enumeration have its own dedicated block?
+- Does the file read contract-first: package doc, const/var, exported type, constructor, exported methods, then unexported helpers last?
+- Are functions grouped by receiver, with no interleaving of two types' methods?
+- Do non-doc comments explain *why*, not narrate *what*? Any commented-out code or `// ---- section ----` banners to delete?
+- Is the diff free of bare `TODO`/`FIXME`/`XXX`? Does every remaining marker carry an issue reference (`TODO(#123):`)?
+
 ## Naming & Style
 
 - Are package names short, lowercase, single words -- and not `util`/`common`/`helpers`?
@@ -42,6 +51,7 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 ## Interfaces & Types
 
 - Are interfaces small and defined at the consumer, not published by the implementer?
+- If an interface lives provider-side, is it genuinely a pluggable contract (interface in parent package, implementations in subpackages, `var _ Iface = (*Impl)(nil)` checks), not a Java-style habit?
 - Does the code accept interfaces and return concrete types?
 - Is the zero value of new types usable, or is there a hidden "must call Init first" trap?
 - Are generics used for type-safe containers/concurrency, not to abstract business logic?
@@ -102,6 +112,8 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 - Does CI run `govulncheck ./...` as a hard gate (non-zero exit fails the build), not an ignored advisory?
 - Are `go.mod`/`go.sum` committed, tool-maintained, and never hand-edited?
 - Is untrusted input validated and size-bounded at the trust boundary?
+- Is every decode followed by validation -- zero-value traps caught (missing field vs. explicit zero), unknown fields rejected where strictness matters, state transitions checked against the current state?
+- Are hand-written parsers and custom `UnmarshalJSON` methods covered by fuzz targets?
 - Are SQL/shell/path operations parameterized rather than string-concatenated from user input?
 - Are required secrets refused when absent (no insecure default) and kept out of logs?
 

@@ -2,6 +2,8 @@
 
 ## Table of Contents
 
+- Requirement fidelity gate (see requirement-fidelity.md)
+- Construction-level rules and anti-patterns (see code-construction-rules.md)
 - Severity rubric (`P0`..`P3`)
 - Layer boundary checks (clean architecture)
 - Cross-layer business logic chaos patterns
@@ -17,6 +19,14 @@
 - Code smells quick reference
 - Testing best practices
 - Reporting heuristics
+
+## Requirement Fidelity Gate
+
+See [requirement-fidelity.md](requirement-fidelity.md). Run it **before** any check in this file: locate the requirement source, map requirement items to code paths and tests, and classify mismatches as design-level defects vs behavior bugs. Architecture checks on a change that implements the wrong requirement produce a well-structured wrong product.
+
+## Construction-Level Rules
+
+See [code-construction-rules.md](code-construction-rules.md) for function/statement/variable-level checks (naming, variables, constants, control flow, comments, defensive programming, error handling, concurrency) and the anti-pattern catalog with worked examples. Apply them while walking the diff, after the architecture lenses in this file.
 
 ## Severity Rubric (`P0`..`P3`)
 
@@ -473,6 +483,8 @@ The goal is to decide whether the codebase can operate safely in real production
 ## Testing Best Practices
 
 ### What to Test
+- Requirement-based tests: each key requirement item maps to at least one test that fails if the requirement is violated (see [requirement-fidelity.md](requirement-fidelity.md))
+- Boundary values, invalid/dirty input, and failure paths — not just the nominal path
 - Unit tests for business logic
 - Integration tests for data access
 - Test names describe behavior (Given_When_Then)

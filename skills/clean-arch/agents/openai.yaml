@@ -1,4 +1,4 @@
 interface:
   display_name: "Clean Architecture Review"
-  short_description: "Review boundary violations, SOLID/KISS issues, and prod risk"
-  default_prompt: "Use $clean-architecture-review to review this codebase or PR for clean-architecture boundary violations, SOLID/KISS problems, and production robustness risks, then report findings with P0-P3 severity and concrete fix directions."
+  short_description: "Review requirement fidelity, boundary violations, SOLID/KISS issues, and prod risk"
+  default_prompt: "Use $clean-architecture-review to review this codebase or PR for requirement fidelity (does the change implement the stated requirement and all its scenarios), clean-architecture boundary violations, SOLID/KISS problems, and production robustness risks, then report requirement coverage first and findings with P0-P3 severity and concrete fix directions."

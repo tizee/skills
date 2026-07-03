@@ -39,6 +39,8 @@ type Service struct {
 
 Why this beats the Java-style "implementer publishes the interface": the interface is tiny (one method, not the whole repository surface), it lives next to the code that depends on it, and the implementing package has zero knowledge of who consumes it -- so there is no import coupling and tests can pass a trivial stub.
 
+One sanctioned exception: when a package's *purpose* is a pluggable contract with multiple interchangeable backends (the `database/sql`/`driver` shape), the interface lives in the parent package with implementations in subpackages -- see the "two legitimate homes for an interface" section in project-structure.md.
+
 ## Keep interfaces small
 
 The standard library's most-used interfaces have one method: `io.Reader`, `io.Writer`, `fmt.Stringer`. Small interfaces are easy to implement, easy to mock, and compose freely (`io.ReadWriter` is just `Reader` + `Writer`). A ten-method interface is a design smell -- it usually means you are describing a concrete type, not an abstraction.
