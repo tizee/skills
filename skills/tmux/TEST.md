@@ -11,7 +11,7 @@ A comprehensive test script is provided to validate all functionality:
 Run the complete test suite:
 
 ```bash
-cd ~/.config/claude/skills/tmux
+cd path/to/skills/tmux
 tools/test-skill.sh
 ```
 
@@ -39,7 +39,7 @@ command -v tmux && echo "tmux $(tmux -V) found" || echo "tmux not found"
 #### Test 2: Create Clean Session
 ```bash
 # Create test socket directory
-mkdir -p "${TMPDIR:-/tmp}/claude-tmux-sockets"
+mkdir -p "${TMPDIR:-/tmp}/agent-tmux-sockets"
 
 # Create clean session (isolated config)
 tools/create-session.sh \
@@ -50,28 +50,27 @@ tools/create-session.sh \
   -t 5
 
 # Verify session exists
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/test-clean.sock" list-sessions
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/test-clean.sock" list-sessions
 
 # Clean up
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/test-clean.sock" kill-session -t test-clean
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/test-clean.sock" kill-session -t test-clean
 ```
 
-#### Test 3: Create User Session
+#### Test 3: Create Default Session (clean-by-default) and verify isolation
 ```bash
-# Create user session with your config
+# No -c flag: config level defaults to clean (deterministic, isolated)
 tools/create-session.sh \
-  -n test-user \
-  -c user \
+  -n test-default \
   -p 'echo "test"' \
   -w 'test' \
   -t 5
 
-# Verify session exists and has your keybindings
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/test-user.sock" show-option -g prefix
-# Should show: prefix C-a (or your custom prefix)
+# Verify the user's ~/.tmux.conf did NOT leak: prefix must be the default C-b
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/test-default.sock" show-option -g prefix
+# Should show: prefix C-b  (NOT your custom prefix)
 
 # Clean up
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/test-user.sock" kill-session -t test-user
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/test-default.sock" kill-session -t test-default
 ```
 
 #### Test 4: Find Sessions
@@ -83,7 +82,7 @@ tools/find-sessions.sh --all
 tools/find-sessions.sh -q "python"
 
 # Check specific socket
-tools/find-sessions.sh -s "${TMPDIR:-/tmp}/claude-tmux-sockets/test-clean.sock"
+tools/find-sessions.sh -s "${TMPDIR:-/tmp}/agent-tmux-sockets/test-clean.sock"
 ```
 
 #### Test 5: Python REPL Session
@@ -97,15 +96,15 @@ tools/create-session.sh \
   -t 10
 
 # Send Python commands
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/python-test.sock" send-keys -t "python-test:0.0" "print('Hello, World!')" Enter
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/python-test.sock" send-keys -t "python-test:0.0" "print('Hello, World!')" Enter
 
 # Capture output
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/python-test.sock" capture-pane -p -t "python-test:0.0" -S -5
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/python-test.sock" capture-pane -p -t "python-test:0.0" -S -5
 
 # Should show: Hello, World!
 
 # Clean up
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/python-test.sock" kill-session -t python-test
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/python-test.sock" kill-session -t python-test
 ```
 
 #### Test 6: LLDB Session (if available)
@@ -115,19 +114,18 @@ echo '#include <stdio.h>
 int main() { printf("test"); return 0; }' > /tmp/test.c
 clang -g /tmp/test.c -o /tmp/test-program
 
-# Start LLDB session with lldbinit support
+# Start LLDB session (clean by default)
 tools/create-session.sh \
   -n lldb-test \
-  -c user \
   -p 'lldb /tmp/test-program' \
   -w '\\(lldbinit\\)' \
   -t 10
 
 # Send LLDB commands
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/lldb-test.sock" send-keys -t "lldb-test:0.0" "breakpoint set -n main" Enter
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/lldb-test.sock" send-keys -t "lldb-test:0.0" "breakpoint set -n main" Enter
 
 # Clean up
-tmux -S "${TMPDIR:-/tmp}/claude-tmux-sockets/lldb-test.sock" kill-session -t lldb-test
+tmux -S "${TMPDIR:-/tmp}/agent-tmux-sockets/lldb-test.sock" kill-session -t lldb-test
 rm -f /tmp/test.c /tmp/test-program
 ```
 
@@ -137,7 +135,7 @@ The automated test suite runs 8 tests:
 
 1. **Test 1**: Dependency Check - Verifies tmux is installed and accessible
 2. **Test 2**: Create Clean Session - Tests isolated session creation
-3. **Test 3**: Create User Session - Tests user config session creation
+3. **Test 3**: Create Default Session - Verifies clean-by-default and that the user's config does not leak
 4. **Test 4**: Find Sessions - Tests session discovery functionality
 5. **Test 5**: Wait for Text - Verifies session responsiveness
 6. **Test 6**: Python REPL - Tests Python REPL integration
@@ -159,12 +157,13 @@ Test 1: Checking dependencies...
 Test 2: Creating clean session...
 ✓ Clean session created
 
-Test 3: Creating user session...
-✓ User session created
+Test 3: Creating default session (no -c) and verifying config isolation...
+✓ Default session created
+✓ User config isolated (prefix is default C-b)
 
 Test 4: Finding sessions...
 ✓ test-skill-clean session found
-✓ test-skill-user session found
+✓ test-skill-default session found
 
 Test 5: Wait for text...
 ✓ Session test-skill-clean is responding
@@ -194,7 +193,7 @@ Cleaning up test artifacts...
 The test suite covers:
 
 - **Dependencies**: tmux availability (bash version compatibility built-in)
-- **Session Creation**: All config levels (clean, user)
+- **Session Creation**: Clean-by-default plus config isolation (user config never leaks); opt-in levels (none, user, custom)
 - **Session Management**: Find and list sessions
 - **Process Interaction**: Send keys and wait for output
 - **Real-world Scenarios**: Python REPL, LLDB debugging with lldbinit
@@ -222,7 +221,7 @@ jobs:
           sudo apt-get install -y tmux clang python3
       - name: Run tests
         run: |
-          cd ~/.config/claude/skills/tmux
+          cd path/to/skills/tmux
           bash tools/test-skill.sh
 ```
 
@@ -250,7 +249,7 @@ tools/create-session.sh -n test -c clean -p 'python3' -w '>>>' -t 30  # 30 secon
 ### Permission denied on socket
 **Solution**: Check socket directory permissions
 ```bash
-ls -la "${TMPDIR:-/tmp}/claude-tmux-sockets"
+ls -la "${TMPDIR:-/tmp}/agent-tmux-sockets"
 # Should be writable by current user
 ```
 
@@ -288,7 +287,7 @@ The test suite has intelligent cleanup behavior:
 
 Logs are preserved in `/tmp/` when tests fail:
 - `/tmp/test-clean.log` - Clean session test logs
-- `/tmp/test-user.log` - User session test logs
+- `/tmp/test-default.log` - Default (clean-by-default) session test logs
 - `/tmp/python-test.log` - Python REPL test logs
 - `/tmp/lldb-test.log` - LLDB test logs
 

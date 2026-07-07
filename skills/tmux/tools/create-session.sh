@@ -19,29 +19,34 @@ Create tmux session with specified configuration isolation level.
 
 Options:
   -n, --name       Session name (required)
-  -c, --config     Config level: clean, user, custom (required)
+  -c, --config     Config level: clean (default), none, user, custom
   -p, --program    Program to launch in session (optional)
-  -s, --socket-dir Socket directory (default: $CLAUDE_TMUX_SOCKET_DIR or /tmp/claude-tmux-sockets)
+  -s, --socket-dir Socket directory (default: $AGENT_TMUX_SOCKET_DIR or /tmp/agent-tmux-sockets)
   -f, --config-file Custom config file path (used with -c custom)
   -w, --wait-for   Wait for pattern before exiting (optional)
   -t, --timeout    Timeout for wait pattern (default: 15)
   -h, --help       Show this help
 
-Config levels:
-  clean  - No configuration, maximum performance (-f /dev/null)
-  user   - Your tmux config (~/.config/tmux/tmux.basic.conf) with familiar keybindings
+Config levels (config is applied to the command that STARTS the server,
+so the user's ~/.tmux.conf is never sourced unless you opt in with -c user):
+  clean  - Bundled deterministic config (tools/clean.conf): status off,
+           mouse off, no auto-rename, large scrollback. Best for scraping.
+           This is the DEFAULT.
+  none   - Absolutely no config (-f /dev/null); leaves tmux built-in defaults.
+  user   - Your tmux config (~/.config/tmux/tmux.basic.conf). Opt-in only;
+           may break pane scraping with mouse mode, plugins, auto-rename.
   custom - Custom config file (specify with -f)
 
 Examples:
-  create-session.sh -n python-repl -c clean -p 'python3 -q'
-  create-session.sh -n gdb-debug -c user -p 'gdb --quiet ./program'
+  create-session.sh -n python-repl -p 'python3 -q'            # clean by default
+  create-session.sh -n gdb-debug -c clean -p 'gdb --quiet ./program'
   create-session.sh -n custom-env -c custom -f ~/my-tmux.conf -p 'bash'
 USAGE
 }
 
 # Default values
 SESSION_NAME=""
-CONFIG_LEVEL=""
+CONFIG_LEVEL="clean"  # clean-by-default: never source the user's ~/.tmux.conf
 PROGRAM=""
 SOCKET_DIR=""
 CUSTOM_CONFIG=""
@@ -64,16 +69,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [[ -z "$SESSION_NAME" || -z "$CONFIG_LEVEL" ]]; then
-  echo "Error: Session name and config level are required" >&2
+if [[ -z "$SESSION_NAME" ]]; then
+  echo "Error: Session name is required" >&2
   usage
   exit 1
 fi
 
 # Validate config level
 case "$CONFIG_LEVEL" in
-  clean|user|custom) ;;
-  *) echo "Error: Invalid config level '$CONFIG_LEVEL'. Use: clean, user, custom" >&2
+  clean|none|user|custom) ;;
+  *) echo "Error: Invalid config level '$CONFIG_LEVEL'. Use: clean, none, user, custom" >&2
      exit 1 ;;
 esac
 
@@ -85,7 +90,7 @@ fi
 
 # Set socket directory
 if [[ -z "$SOCKET_DIR" ]]; then
-  SOCKET_DIR="${CLAUDE_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/claude-tmux-sockets}"
+  SOCKET_DIR="${AGENT_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/agent-tmux-sockets}"
 fi
 
 # Create socket directory
@@ -100,11 +105,23 @@ if tmux -S "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -q "^
   exit 1
 fi
 
-# Determine tmux command based on config level
+# Determine tmux command based on config level.
+# NOTE: -f only affects the command that STARTS the server, which is exactly
+# the `new` below. Once the server is up, later `tmux -S "$SOCKET"` calls
+# attach to it and inherit this config.
 case "$CONFIG_LEVEL" in
   clean)
+    CLEAN_CONFIG="$BASE_DIR/tools/clean.conf"
+    if [[ ! -f "$CLEAN_CONFIG" ]]; then
+      echo "Error: bundled clean config missing: $CLEAN_CONFIG" >&2
+      exit 1
+    fi
+    TMUX_CMD="tmux -S '$SOCKET' -f '$CLEAN_CONFIG'"
+    CONFIG_DESC="clean (deterministic: $CLEAN_CONFIG)"
+    ;;
+  none)
     TMUX_CMD="tmux -S '$SOCKET' -f /dev/null"
-    CONFIG_DESC="clean (no config)"
+    CONFIG_DESC="none (-f /dev/null, tmux built-in defaults)"
     ;;
   user)
     USER_CONFIG="$HOME/.config/tmux/tmux.basic.conf"
@@ -113,7 +130,8 @@ case "$CONFIG_LEVEL" in
       CONFIG_DESC="user config: $USER_CONFIG"
     else
       echo "Warning: User config not found at $USER_CONFIG, falling back to clean config" >&2
-      TMUX_CMD="tmux -S '$SOCKET' -f /dev/null"
+      CLEAN_CONFIG="$BASE_DIR/tools/clean.conf"
+      TMUX_CMD="tmux -S '$SOCKET' -f '$CLEAN_CONFIG'"
       CONFIG_DESC="clean (user config not found)"
     fi
     ;;
@@ -174,7 +192,10 @@ case "$CONFIG_LEVEL" in
     echo "Note: Using your keybindings (prefix: C-a, detach: C-a d)"
     ;;
   clean)
-    echo "Note: Clean session, no custom keybindings loaded"
+    echo "Note: Deterministic clean session (no status bar, no mouse, no auto-rename)"
+    ;;
+  none)
+    echo "Note: No config loaded; tmux built-in defaults apply"
     ;;
   custom)
     echo "Note: Using custom config from $CUSTOM_CONFIG"

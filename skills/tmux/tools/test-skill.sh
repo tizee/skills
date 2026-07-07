@@ -23,7 +23,11 @@ if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
 else
   BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 fi
-SOCKET_DIR="${TMPDIR:-/tmp}/claude-tmux-sockets"
+# Use an isolated socket dir so tests never scan or kill other tools' sockets
+# (find-sessions.sh --all would otherwise trip over unrelated dead sockets and,
+# under `set -o pipefail`, make the grep-based checks report false failures).
+SOCKET_DIR="${TMPDIR:-/tmp}/agent-tmux-test-sockets"
+export AGENT_TMUX_SOCKET_DIR="$SOCKET_DIR"
 PASSED=0
 FAILED=0
 
@@ -62,7 +66,7 @@ cleanup() {
     rm -f /tmp/test-lldb.c /tmp/test-lldb-program
 
     # Clean up all log files
-    rm -f /tmp/test-clean.log /tmp/test-user.log /tmp/python-test.log /tmp/lldb-test.log
+    rm -f /tmp/test-clean.log /tmp/test-default.log /tmp/python-test.log /tmp/lldb-test.log
 }
 
 usage() {
@@ -152,24 +156,39 @@ if "$BASE_DIR/tools/create-session.sh" \
     -t 3 \
     > /tmp/test-clean.log 2>&1; then
     log_info "Clean session created"
+    # Verify the bundled clean.conf was actually applied (deterministic scraping)
+    clean_status=$(tmux -S "$SOCKET_DIR/test-skill-clean.sock" show -gv status 2>/dev/null || echo "")
+    if [[ "$clean_status" == "off" ]]; then
+        log_info "Clean config applied (status bar off)"
+    else
+        log_error "Clean config not applied (status='$clean_status', expected 'off')"
+        exit 1
+    fi
 else
     log_error "Failed to create clean session"
     log_debug "Log: $(cat /tmp/test-clean.log 2>/dev/null || echo 'No log file')"
     exit 1
 fi
 
-# Test 3: Create User Session
+# Test 3: Create Default Session (clean-by-default) and verify config isolation
 echo
-echo "Test 3: Creating user session..."
+echo "Test 3: Creating default session (no -c) and verifying config isolation..."
 if "$BASE_DIR/tools/create-session.sh" \
-    -n test-skill-user \
-    -c user \
-    -p 'echo "test-user"' \
-    > /tmp/test-user.log 2>&1; then
-    log_info "User session created"
+    -n test-skill-default \
+    -p 'echo "test-default"' \
+    > /tmp/test-default.log 2>&1; then
+    log_info "Default session created"
+    # The user's ~/.tmux.conf must NOT leak: prefix should be the tmux default C-b
+    default_prefix=$(tmux -S "$SOCKET_DIR/test-skill-default.sock" show -gv prefix 2>/dev/null || echo "")
+    if [[ "$default_prefix" == "C-b" ]]; then
+        log_info "User config isolated (prefix is default C-b)"
+    else
+        log_error "User config leaked into default session (prefix='$default_prefix', expected 'C-b')"
+        exit 1
+    fi
 else
-    log_error "Failed to create user session"
-    log_debug "Log: $(cat /tmp/test-user.log 2>/dev/null || echo 'No log file')"
+    log_error "Failed to create default session"
+    log_debug "Log: $(cat /tmp/test-default.log 2>/dev/null || echo 'No log file')"
     exit 1
 fi
 
@@ -183,10 +202,10 @@ else
     exit 1
 fi
 
-if "$BASE_DIR/tools/find-sessions.sh" --all | grep "test-skill-user" > /dev/null; then
-    log_info "test-skill-user session found"
+if "$BASE_DIR/tools/find-sessions.sh" --all | grep "test-skill-default" > /dev/null; then
+    log_info "test-skill-default session found"
 else
-    log_error "test-skill-user session not found"
+    log_error "test-skill-default session not found"
     exit 1
 fi
 
@@ -238,7 +257,6 @@ int main() { printf("test"); return 0; }' > /tmp/test-lldb.c
     if [[ -f /tmp/test-lldb-program ]]; then
         if "$BASE_DIR/tools/create-session.sh" \
             -n test-skill-lldb \
-            -c user \
             -p 'lldb /tmp/test-lldb-program' \
             -w '\(lldbinit\)' \
             -t 3 > /tmp/lldb-test.log 2>&1; then
@@ -261,10 +279,10 @@ fi
 echo
 echo "Test 8: Testing cleanup..."
 tmux -S "$SOCKET_DIR/test-skill-clean.sock" kill-session -t test-skill-clean 2>/dev/null || true
-tmux -S "$SOCKET_DIR/test-skill-user.sock" kill-session -t test-skill-user 2>/dev/null || true
+tmux -S "$SOCKET_DIR/test-skill-default.sock" kill-session -t test-skill-default 2>/dev/null || true
 
 if ! tmux -S "$SOCKET_DIR/test-skill-clean.sock" has-session -t test-skill-clean 2>/dev/null && \
-   ! tmux -S "$SOCKET_DIR/test-skill-user.sock" has-session -t test-skill-user 2>/dev/null; then
+   ! tmux -S "$SOCKET_DIR/test-skill-default.sock" has-session -t test-skill-default 2>/dev/null; then
     log_info "Cleanup successful"
 else
     log_warn "Some sessions may not have been cleaned up properly"

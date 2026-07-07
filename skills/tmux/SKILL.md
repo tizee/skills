@@ -8,36 +8,57 @@ license: WTFPL
 
 Programmable terminal multiplexer for interactive work. Use tmux to remote control interactive CLIs (python, gdb, etc.) by sending keystrokes and scraping pane output.
 
+## Config isolation (READ FIRST)
+
+Start every server with an explicit config so keystroke injection and pane
+scraping stay deterministic. tmux reads `-f` only on the command that *starts*
+the server (the first `new` on a socket); later `tmux -S "$SOCKET"` calls
+attach and inherit it.
+
+- **Prefer `create-session.sh`.** It loads the bundled `tools/clean.conf`
+  (status off, mouse off, no auto-rename, large scrollback) automatically, so a
+  single command gives you a clean, isolated session with no extra flags.
+- **For manual servers, pass `-f` on the first `new`** — `-f tools/clean.conf`
+  for the deterministic config, or `-f /dev/null` for a bare server. This keeps
+  the session self-contained and independent of the user's `~/.tmux.conf`.
+- **Load the user's real config on request** with `create-session.sh -c user`,
+  when the task genuinely needs their personal keybindings.
+
 ## Quickstart
 
-**Always use `create-session.sh` to create sessions** - it handles socket management, prompt detection, and error handling automatically.
+**Always use `create-session.sh` to create sessions** - it handles socket management, config isolation (clean by default), prompt detection, and error handling automatically.
 
 ```bash
-# Python REPL session
-tools/create-session.sh -n python -c clean \
+# Python REPL session (clean config is the default)
+tools/create-session.sh -n python \
   -p 'PYTHON_BASIC_REPL=1 python3 -q' -w '^>>> '
 
 # After creation, ALWAYS provide monitoring commands:
 To monitor this session yourself:
-  tmux -S "/tmp/claude-tmux-sockets/python.sock" attach -t python
+  tmux -S "/tmp/agent-tmux-sockets/python.sock" attach -t python
 
 Or to capture the output once:
-  tmux -S "/tmp/claude-tmux-sockets/python.sock" capture-pane -p -J -t python:0.0 -S -200
+  tmux -S "/tmp/agent-tmux-sockets/python.sock" capture-pane -p -J -t python:0.0 -S -200
 ```
 
 This must ALWAYS be printed right after a session was started and once again at the end of the tool loop. But the earlier you send it, the happier the user will be.
 
 ### Manual Session Creation (Advanced)
 
-If you need full control, you can create sessions manually:
+If you need full control, you can create sessions manually. The critical part
+is `-f` on the **first** command (the one that starts the server) so the user's
+`~/.tmux.conf` is never sourced:
 
 ```bash
-SOCKET_DIR=${TMPDIR:-/tmp}/claude-tmux-sockets
+SOCKET_DIR=${AGENT_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/agent-tmux-sockets}
 mkdir -p "$SOCKET_DIR"
-SOCKET="$SOCKET_DIR/claude.sock"
-SESSION=claude-python
+SOCKET="$SOCKET_DIR/agent.sock"
+SESSION=agent-python
+CLEAN_CONF="$(dirname "$0")/tools/clean.conf"   # or an absolute path to it
 
-tmux -S "$SOCKET" new -d -s "$SESSION" -n shell
+# -f on this first command loads the deterministic config and keeps the
+# session isolated (use /dev/null if you cannot reference clean.conf).
+tmux -S "$SOCKET" -f "$CLEAN_CONF" new -d -s "$SESSION" -n shell
 tmux -S "$SOCKET" send-keys -t "$SESSION":0.0 -- 'PYTHON_BASIC_REPL=1 python3 -q' Enter
 tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200
 tmux -S "$SOCKET" kill-session -t "$SESSION"
@@ -45,21 +66,21 @@ tmux -S "$SOCKET" kill-session -t "$SESSION"
 
 ## Socket convention
 
-- Place tmux sockets under `CLAUDE_TMUX_SOCKET_DIR` (defaults to `${TMPDIR:-/tmp}/claude-tmux-sockets`) and use `tmux -S "$SOCKET"` so we can enumerate/clean them. Create the dir first: `mkdir -p "$CLAUDE_TMUX_SOCKET_DIR"`.
-- Default socket path to use unless you must isolate further: `SOCKET="$CLAUDE_TMUX_SOCKET_DIR/claude.sock"`.
-- **Never use default `/tmp/tmux-*` sockets.** Use per-session sockets in this directory.
+- Place tmux sockets under `AGENT_TMUX_SOCKET_DIR` (defaults to `${TMPDIR:-/tmp}/agent-tmux-sockets`) and use `tmux -S "$SOCKET"` so we can enumerate/clean them. Create the dir first: `mkdir -p "$AGENT_TMUX_SOCKET_DIR"`.
+- Default socket path to use unless you must isolate further: `SOCKET="$AGENT_TMUX_SOCKET_DIR/agent.sock"`.
+- **Keep every session on a per-socket path under this directory** so you can enumerate and clean them up reliably.
 
 ## Targeting panes and naming
 
-- Target format: `{session}:{window}.{pane}`, defaults to `:0.0` if omitted. Keep names short (e.g., `claude-py`, `claude-gdb`).
-- Use `-S "$SOCKET"` consistently to stay on the private socket path. If you need user config, drop `-f /dev/null`; otherwise `-f /dev/null` gives a clean config.
+- Target format: `{session}:{window}.{pane}`, defaults to `:0.0` if omitted. Keep names short (e.g., `agent-py`, `agent-gdb`).
+- Use `-S "$SOCKET"` consistently to stay on the private socket path. The config comes from the `-f` on the server-starting command (see "Config isolation"): clean by default, `-c user` only when you explicitly need the user's keybindings.
 - Inspect: `tmux -S "$SOCKET" list-sessions`, `tmux -S "$SOCKET" list-panes -a`.
 
 ## Finding sessions
 
 **Always use the helper** to find created sockets:
 - List sessions on your active socket: `tools/find-sessions.sh -S "$SOCKET"`
-- Find all sockets: `tools/find-sessions.sh --all` (scans `CLAUDE_TMUX_SOCKET_DIR`)
+- Find all sockets: `tools/find-sessions.sh --all` (scans `AGENT_TMUX_SOCKET_DIR`)
 - Filter by name: `tools/find-sessions.sh -S "$SOCKET" -q "pattern"`
 
 ## Sending input safely
@@ -70,33 +91,28 @@ tmux -S "$SOCKET" kill-session -t "$SESSION"
 - To send control keys: `tmux -S "$SOCKET" send-keys -t target C-c`, `C-d`, `C-z`, `Escape`, etc.
 - Send Enter: `tmux -S "$SOCKET" send-keys -t target -- "cmd" Enter`
 
-### CRITICAL: `-l` Flag Cannot Be Combined With Special Keys
+### Sending literal text with `-l`
 
-**The `-l` (literal) flag treats ALL input as literal text. You CANNOT combine `-l` with special keys like `Enter`, `C-c`, etc. in the same command.**
+The `-l` (literal) flag sends its argument as raw text. Send the text with
+`-l`, then send `Enter` as a separate command to execute it:
 
-**WRONG - This will NOT work:**
 ```bash
-# INCORRECT: Trying to send literal text + Enter in one command
-tmux -S "$SOCKET" send-keys -t python:0.0 -l 'print("hello world")' Enter
-# This fails because -l makes "Enter" literal text instead of a keystroke
-```
-
-**CORRECT - Use two separate commands:**
-```bash
-# CORRECT: Send literal text first, then Enter separately
+# Send literal text, then execute
 tmux -S "$SOCKET" send-keys -t python:0.0 -l 'print("hello world")'
 tmux -S "$SOCKET" send-keys -t python:0.0 Enter
 ```
 
-**Alternative - Without `-l` flag (if no special chars):**
+For plain text without special characters, a single command with `Enter` works:
+
 ```bash
-# CORRECT: Simple text can be sent with Enter in one command
 tmux -S "$SOCKET" send-keys -t python:0.0 'print("hello world")' Enter
 ```
 
-**When to use each approach:**
-- Use `-l` flag with separate `Enter` command when your text contains special shell characters like dollar signs, exclamation marks, or backticks
-- Use single command without `-l` flag for simple text without special characters
+**Pick the approach by content:**
+- Use `-l` plus a separate `Enter` when the text contains special shell
+  characters (dollar signs, exclamation marks, backticks) — `-l` preserves them
+  exactly.
+- Use a single command with `Enter` for plain text.
 
 ### BEST PRACTICE: Sending Multi-line Code Blocks
 
@@ -146,7 +162,7 @@ tmux -S "$SOCKET" send-keys -t python:0.0 Enter
 - Capture recent history (joined lines to avoid wrapping artifacts): `tmux -S "$SOCKET" capture-pane -p -J -t target -S -200`.
 - For continuous monitoring, poll with the helper script (below) instead of `tmux wait-for` (which does not watch pane output).
 - You can also temporarily attach to observe: `tmux -S "$SOCKET" attach -t "$SESSION"`; detach with `Ctrl+b d`.
-- When giving instructions to a user, **explicitly print a copy/paste monitor command** alongside the action don't assume they remembered the command.
+- When giving instructions to a user, **explicitly print a copy/paste monitor command** alongside the action so they always have it at hand.
 
 ## Spawning Processes
 
@@ -174,11 +190,12 @@ Some special rules for processes:
 **Always use `create-session.sh` instead of manual tmux commands** - it handles all the details automatically.
 
 ```bash
-tools/create-session.sh -n NAME -c clean|user|custom [options]
+tools/create-session.sh -n NAME [-c clean|none|user|custom] [options]
 
 Options:
   -n NAME        Session name
-  -c LEVEL       clean (no config), user (your keys), custom
+  -c LEVEL       clean (default, deterministic), none (-f /dev/null),
+                 user (your keys/config), custom
   -p PROGRAM     Program to launch
   -w PATTERN     Wait for regex pattern
   -t TIMEOUT     Timeout (default 15)
@@ -190,16 +207,16 @@ Options:
 **Recommended usage examples:**
 
 ```bash
-# Python (always use PYTHON_BASIC_REPL=1)
-tools/create-session.sh -n python -c clean \
+# Python (always use PYTHON_BASIC_REPL=1); clean config is the default
+tools/create-session.sh -n python \
   -p 'PYTHON_BASIC_REPL=1 python3 -q' -w '^>>> '
 
-# GDB
-tools/create-session.sh -n gdb -c user \
+# GDB (clean by default; only use -c user if you need your own keybindings)
+tools/create-session.sh -n gdb \
   -p 'gdb --quiet ./program' -w '^(gdb) '
 
 # PostgreSQL
-tools/create-session.sh -n db -c clean \
+tools/create-session.sh -n db \
   -p 'psql -h localhost mydb' -w 'mydb=#'
 ```
 
@@ -237,14 +254,15 @@ tools/find-sessions.sh -S SOCKET -q "pattern" # Filter by name
 
 ## Cleanup
 
-**CRITICAL**: Always clean up after completing work. Killing sessions may not remove socket files - you MUST verify and remove them.
+**Always clean up after completing work.** Killing a session can leave its socket file behind, so confirm the file is removed as the final step.
 
-### Todo Tool Integration
+### Track cleanup steps
 
-**MANDATORY**: When working with tmux sessions, use the TodoWrite tool to track cleanup tasks and ensure nothing is forgotten:
+When working with tmux sessions, track the cleanup steps in whatever task or
+todo tracker your agent provides, so nothing is forgotten:
 
 ```
-TodoWrite:
+Cleanup checklist:
 1. Create tmux session (in_progress)
 2. Complete interactive work (pending)
 3. Kill tmux session (pending)
@@ -252,7 +270,7 @@ TodoWrite:
 5. Remove socket file if still exists (pending)
 ```
 
-Mark each cleanup step as completed ONLY after verification. This prevents leaving orphaned socket files.
+Mark each cleanup step as completed after verification, so no orphaned socket files are left behind.
 
 ### Proper Cleanup Procedure
 
@@ -273,7 +291,7 @@ Mark each cleanup step as completed ONLY after verification. This prevents leavi
    rm -f "$SOCKET"
    ```
 
-4. **Mark cleanup tasks as completed in TodoWrite** - Only after confirming socket file is gone.
+4. **Mark cleanup tasks completed in your task tracker** - after confirming the socket file is gone.
 
 ### Alternative Cleanup Methods
 
@@ -287,11 +305,10 @@ Mark each cleanup step as completed ONLY after verification. This prevents leavi
   tmux -S "$SOCKET" kill-server
   ```
 
-**CRITICAL WARNING:** Even `kill-server` may leave socket files behind. ALWAYS:
-1. Verify with `ls` that the socket file is gone
-2. Manually remove stale socket files with `rm -f "$SOCKET"`
-3. Update your Todo tasks to mark cleanup as completed
-4. NEVER mark cleanup as done without verifying socket file removal
+**Finish cleanup by confirming the socket file is gone:**
+1. `ls` the socket directory to confirm the file is removed
+2. `rm -f "$SOCKET"` to clear any stale socket file
+3. Mark your cleanup steps completed once the file is gone
 
 ## Troubleshooting
 
