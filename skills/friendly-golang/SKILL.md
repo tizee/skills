@@ -40,10 +40,10 @@ For any non-trivial change, run the toolchain (`gofmt`, `go vet`, `golangci-lint
 | Principles | Simplicity first, clarity over cleverness, accept interfaces return structs | [references/principles.md](references/principles.md) |
 | Project Structure | `cmd/`, `internal/`, `pkg/` layout; package naming and boundaries | [references/project-structure.md](references/project-structure.md) |
 | Source File Discipline | Single const/var blocks, exported-above ordering, comment density, zero bare TODO/FIXME | [references/source-file-discipline.md](references/source-file-discipline.md) |
-| Error Handling | Wrap with `%w`, sentinel errors, `errors.Is/As`, custom error types | [references/error-handling.md](references/error-handling.md) |
-| Interfaces & Types | Small consumer-side interfaces, zero values, embedding, generics | [references/interfaces-types.md](references/interfaces-types.md) |
+| Error Handling | Wrap with `%w`, sentinel errors, `errors.Is/As`, custom error types, deferred rollback on the error path | [references/error-handling.md](references/error-handling.md) |
+| Interfaces & Types | Small consumer-side interfaces, capability interfaces (opt-in via type assertion), template-method-via-closures, zero values, embedding, generics | [references/interfaces-types.md](references/interfaces-types.md) |
 | Concurrency | `context` propagation, goroutine lifecycle, channels, `sync`, `errgroup` | [references/concurrency.md](references/concurrency.md) |
-| API Design | Functional options, constructors, doc comments, exported surface | [references/api-design.md](references/api-design.md) |
+| API Design | Functional options, constructors, doc comments as contracts, exported surface | [references/api-design.md](references/api-design.md) |
 | Config, Logging & CLI | viper/yaml config, `log/slog`, cobra subcommands, graceful shutdown | [references/config-logging-cli.md](references/config-logging-cli.md) |
 | Testing | Table-driven tests, subtests, `t.Parallel`, golden files, mocks | [references/testing.md](references/testing.md) |
 | Security & Supply Chain | `govulncheck` as a CI gate, module proxy/checksum integrity, deserialization boundaries, dependency upgrade policy | [references/security-supply-chain.md](references/security-supply-chain.md) |

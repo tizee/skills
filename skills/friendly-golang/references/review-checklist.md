@@ -16,6 +16,7 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 - Do error strings start lowercase, omit trailing punctuation, and avoid the words "error"/"failed"?
 - Are conditions callers branch on exposed as sentinel errors (`var ErrX = errors.New`) and checked with `errors.Is`?
 - Do errors carrying data implement a custom type with `Unwrap()` and get inspected with `errors.As`?
+- For a multi-step operation that acquires resources, is cleanup a single deferred rollback keyed on the named return `err` (with progress flags), not duplicated into every failure branch? Do fallible steps assign the *named* `err` so the defer can see the failure?
 - Is `panic` used only for unrecoverable programmer errors, never for ordinary failures across a public boundary?
 
 ## Simplicity & Readability
@@ -53,7 +54,9 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 - Are interfaces small and defined at the consumer, not published by the implementer?
 - If an interface lives provider-side, is it genuinely a pluggable contract (interface in parent package, implementations in subpackages, `var _ Iface = (*Impl)(nil)` checks), not a Java-style habit?
 - Does the code accept interfaces and return concrete types?
-- Is the zero value of new types usable, or is there a hidden "must call Init first" trap?
+- Are optional capabilities modeled as small opt-in interfaces discovered by type assertion (`v, ok := x.(Capability)`), rather than bloating the base interface with methods most implementations stub out?
+- Where a shared procedure varies by a few steps across implementations, are the varying steps injected as closures in a spec struct (template-method), with the locking/ordering/cleanup written once? Are optional hooks nil-tolerant?
+- Is the zero value of new types usable, or is there a hidden "must call Init first" trap? If a loaded value needs field repair, is it done once via an opt-in `Init()` rather than at every call site?
 - Are generics used for type-safe containers/concurrency, not to abstract business logic?
 - Is embedding used for behavior reuse rather than to fake inheritance?
 
@@ -74,6 +77,7 @@ Quick-reference questions for reviewing Go code. Not every question applies to e
 - Does a constructor validate required inputs and fail loudly rather than defaulting them away?
 - Are many-optional constructors using functional options, while simple ones stay plain?
 - Does every exported identifier have a doc comment starting with its name?
+- For concurrency/durability/ordering-sensitive APIs, does the doc comment state the *contract* (lock discipline, atomicity, crash-recovery, ownership of returned closers), not just describe the method?
 - Are unreadable boolean parameters replaced with named types or options?
 
 ## Config, Logging & CLI

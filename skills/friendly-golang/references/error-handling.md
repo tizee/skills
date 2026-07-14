@@ -96,6 +96,58 @@ if errors.As(err, &apiErr) {
 }
 ```
 
+## Cleanup on the error path: named returns + deferred rollback
+
+An operation that acquires resources in several steps -- start a process, write a pid file, enter a namespace -- must undo the steps that *did* succeed if a later step fails. Scattering cleanup into every `return nil, err` branch duplicates it and inevitably drifts. The idiom is a single deferred closure that inspects the **named return** `err` and rolls back exactly what was reached, tracked by small boolean progress flags.
+
+```go
+// Named return err lets the deferred cleanup see whether we are failing.
+func (b *Backend) LaunchVMProcess(ctx context.Context, spec LaunchSpec) (pid int, err error) {
+    started := false
+    pidWritten := false
+    defer func() {
+        if err == nil {
+            return // success: keep everything we built
+        }
+        // failure: undo in reverse order, but only the steps we reached.
+        if pidWritten {
+            _ = os.Remove(spec.PIDPath)
+        }
+        if started {
+            _ = spec.Cmd.Process.Kill()
+            _ = spec.Cmd.Wait()
+        }
+        if spec.OnFail != nil {
+            spec.OnFail()
+        }
+    }()
+
+    if err = spec.Cmd.Start(); err != nil {
+        return 0, fmt.Errorf("exec %s: %w", spec.Name, err)
+    }
+    started = true
+    pid = spec.Cmd.Process.Pid
+
+    if err = writePIDFile(spec.PIDPath, pid); err != nil {
+        return 0, fmt.Errorf("write pid file: %w", err)
+    }
+    pidWritten = true
+
+    if err = waitForSocket(ctx, spec.SockPath); err != nil {
+        return 0, err // cleanup kills the process and removes the pid file
+    }
+    return pid, nil
+}
+```
+
+Why this shape:
+- **One cleanup path, not N.** Every failure return runs the same deferred rollback, so a new failure point added later is covered for free -- you cannot forget to clean up in a branch that does not exist yet.
+- **Progress flags, not re-derivation.** `started`/`pidWritten` record what actually happened; the cleanup does not guess by re-`stat`-ing files. Reverse order matches acquisition order.
+- **The assignment must target the named `err`.** Write `if err = f(); err != nil`, not `if err2 := f()`, or the defer sees a stale `nil` and skips rollback. This is the one subtlety -- keep every fallible step assigning the named return.
+- **Ignore rollback errors deliberately.** Best-effort cleanup uses `_ =`; the original `err` is what the caller must see, and a secondary Kill/Remove failure should not mask it. (If a cleanup failure is itself important, join it with `errors.Join`.)
+
+Reach for this whenever success requires several acquisitions that each need undoing; for a single resource, a plain `defer f.Close()` is enough.
+
 ## When to panic (rarely)
 
 `panic` is for truly unrecoverable programmer errors -- a nil dependency that should have been wired at startup, an impossible switch case, a corrupt invariant. It is not for ordinary failures like a missing file or a bad request. Libraries should almost never panic across their public boundary; return an error and let the caller decide. If you must recover (e.g., an HTTP middleware catching a handler panic), recover at a clear boundary and convert it back into an error or a 500 response.

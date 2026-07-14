@@ -73,6 +73,8 @@ For deeper static analysis, `golangci-lint` runs many linters in one pass (and c
 - **P1 (recommended):** `gocritic`, `revive`, `misspell`, plus the formatters `gofumpt`, `goimports`, and `gci` (import grouping with a local prefix). Prometheus's own config enables exactly this formatter+linter combination.
 - **P2 (team-tolerance dependent):** complexity and API-style checks like `cyclop`, `interfacebloat`, `godot`. Useful, opinionated, noisy -- turn them on deliberately.
 
+- **P3 (hardening tier, for mature high-reliability projects):** a stricter bar once the team is fluent. Production systems-level Go projects run configs like: `gofumpt` with `extra-rules`, `gochecknoinits` (bans `init()` so startup order is explicit and testable), `modernize` (rewrites to current-Go idioms), `nestif` (flags deep `if` nesting), `unparam` (unused function parameters), `unconvert` (redundant conversions), `nakedret` (bans naked returns in long functions), `gosec` (security), and `gocyclo` with a hard ceiling (e.g. `min-complexity: 30`). Two habits worth copying from these configs: set `run.tests: false` (or relax noisy linters on `_test.go` via an exclusion rule) so test ergonomics are not fought by production linters, and pin `goimports`/`gci` `local-prefixes` to the module path so import grouping is deterministic. Climb to P3 by adding a linter at a time and fixing its findings, never by flipping them all on at once.
+
 `staticcheck` alone catches a large fraction of real Go bugs and belongs in every project. A friendly low-friction starting config:
 
 ```yaml

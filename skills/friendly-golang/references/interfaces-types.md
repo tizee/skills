@@ -47,6 +47,115 @@ The standard library's most-used interfaces have one method: `io.Reader`, `io.Wr
 
 Do not create an interface "just in case." Add one when you have a *second* implementation or a genuine need to mock in tests. A single-implementation interface is premature abstraction.
 
+## Capability interfaces: opt-in behavior via type assertion
+
+When some implementations of a base interface support an extra capability and others do not, do not widen the base interface to carry optional methods everyone must stub. Declare the capability as its own tiny interface and let a caller *discover* it with a type assertion. This is exactly how the standard library exposes `io.WriterTo`, `http.Flusher`, and `http.Hijacker`: a value opts in by implementing the smaller interface, and the consumer probes for it.
+
+```go
+// The base contract every backend implements.
+type Hypervisor interface {
+    Type() string
+    Start(ctx context.Context, refs []string) ([]string, error)
+    // ... the methods all backends share
+}
+
+// Optional capabilities, each its own small interface. A backend opts in
+// simply by implementing the methods; nothing forces the ones that can't.
+type Hibernator interface {
+    Hibernate(ctx context.Context, ref string, persist func(cfg *Config, dir string) error) error
+}
+
+type Watchable interface {
+    WatchPath() string
+}
+```
+
+The consumer asks whether *this* value supports the capability, and degrades cleanly when it does not:
+
+```go
+// A backend that cannot hibernate fails loudly with a precise message,
+// instead of every backend being forced to implement a no-op stub.
+hib, ok := hyper.(Hibernator)
+if !ok {
+    return fmt.Errorf("backend %s does not support hibernate", hyper.Type())
+}
+return hib.Hibernate(ctx, ref, persist)
+
+// Skip-and-continue when the capability is genuinely optional:
+for _, h := range backends {
+    w, ok := h.(Watchable)
+    if !ok {
+        continue // this backend just isn't watchable; that's fine
+    }
+    watch(w.WatchPath())
+}
+```
+
+Why this beats a fat base interface: backends that lack a capability never grow meaningless stub methods, each capability interface stays one or two methods (trivial to implement and mock), and adding a new capability does not touch the base contract or any backend that ignores it. Keep the assertion honest with a compile-time check on the implementers that *do* support it: `var _ Hibernator = (*Firecracker)(nil)`.
+
+## Template method via injected closures
+
+To share an orchestration skeleton across implementations that differ only in a few steps, do not reach for inheritance or an abstract base type -- Go has neither. Pass the varying steps as function fields in a *spec* struct, and let one shared method run the fixed skeleton while calling the injected hooks at the right points. This is the Go answer to the template-method pattern.
+
+```go
+// The spec carries the steps that vary per backend; the skeleton owns the
+// order, the locking, and the error handling that must be identical.
+type StartSpec struct {
+    RuntimeFiles []string
+    Launch       func(ctx context.Context, rec *VMRecord, sock string) (int, error)
+    PostLaunch   func(ctx context.Context, rec *VMRecord, sock string, pid int) error
+    Wrap         func(rec *VMRecord, fn func() error) error // optional
+}
+
+// One shared skeleton, written once, correct for every backend: it holds the
+// ops lock, validates invariants, then calls the injected steps in order.
+func (b *Backend) StartSequence(ctx context.Context, id string, spec StartSpec) error {
+    unlock, err := b.lockOps(ctx, id)
+    if err != nil {
+        return err
+    }
+    defer unlock()
+    rec, err := b.prepare(ctx, id, spec.RuntimeFiles)
+    if err != nil {
+        return err
+    }
+    return runWrapped(rec, spec.Wrap, func() error {
+        pid, err := spec.Launch(ctx, rec, sockPath(rec))
+        if err != nil {
+            return fmt.Errorf("launch VM: %w", err)
+        }
+        if spec.PostLaunch != nil {
+            if err := spec.PostLaunch(ctx, rec, sockPath(rec), pid); err != nil {
+                return fmt.Errorf("configure VM: %w", err)
+            }
+        }
+        return nil
+    })
+}
+
+// runWrapped applies an optional wrapper hook; a nil hook is a no-op.
+func runWrapped(rec *VMRecord, wrap func(*VMRecord, func() error) error, fn func() error) error {
+    if wrap != nil {
+        return wrap(rec, fn)
+    }
+    return fn()
+}
+```
+
+Each backend supplies only its own steps; the tricky invariants (lock ordering, state flips, cleanup on failure) live in exactly one place:
+
+```go
+func (fc *Firecracker) startOne(ctx context.Context, id string) error {
+    return fc.StartSequence(ctx, id, StartSpec{
+        RuntimeFiles: runtimeFiles,
+        Launch:       func(ctx context.Context, rec *VMRecord, sock string) (int, error) { return fc.launch(ctx, rec, sock) },
+        PostLaunch:   func(ctx context.Context, rec *VMRecord, sock string, _ int) error { return fc.configure(ctx, rec, sock) },
+    })
+}
+```
+
+Use this when the *order and safety* of steps must be identical across implementations but individual steps differ. Prefer it over embedding when the shared logic is a *procedure* (a sequence with locking and error handling) rather than a *set of reusable methods*. Do not use it for two implementations that share nothing but a signature -- a little copying is cheaper than a hook nobody else uses. Optional hooks should be nil-tolerant (guard with `if spec.X != nil` or a `runWrapped`-style helper) so a backend pays only for the steps it needs.
+
 ## Useful zero values
 
 Design types so the zero value is immediately usable. This removes the need for a constructor in simple cases and prevents the "forgot to call Init" class of bugs.
@@ -65,6 +174,30 @@ type Counter struct {
 ```
 
 When a type genuinely needs setup (open connections, validated config), provide a `New` constructor that returns the concrete type and an error, and document that the zero value is not usable.
+
+When a value is *deserialized* rather than constructed (loaded from JSON, an empty store, a snapshot), the zero value can be almost-usable but for a few nil maps or slices. Rather than scatter `if m == nil { m = map[...]{} }` across every reader, let the type opt into a small repair interface the loader calls once:
+
+```go
+// Initer is optionally implemented by T to initialize zero-value fields
+// (e.g. nil maps) after deserialization or when the backing store is empty.
+type Initer interface {
+    Init()
+}
+
+// The loader repairs the value once, centrally, before handing it to callers.
+func (s *Store[T]) load() (*T, error) {
+    v := new(T)
+    if err := s.decode(v); err != nil {
+        return nil, err
+    }
+    if init, ok := any(v).(Initer); ok {
+        init.Init() // fill nil maps/slices so callers see a valid zero state
+    }
+    return v, nil
+}
+```
+
+This keeps the "make the zero value valid" work in one place and off every call site, without forcing types that need no repair to implement anything.
 
 ## Embedding over inheritance
 
