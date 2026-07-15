@@ -34,16 +34,16 @@ Concise guidance for writing Rust code that is correct, idiomatic, and pleasant 
 | Topic | Guidance | Reference |
 | --- | --- | --- |
 | Principles | Correctness first, work with the type system, encode invariants in types | [references/principles.md](references/principles.md) |
-| Error Design | Meaningful error types, Result over panics, design error boundaries | [references/error-design.md](references/error-design.md) |
+| Error Design | Per-subsystem error enums, `#[from]` boundary translation, displaydoc, Result over panics | [references/error-design.md](references/error-design.md) |
 | Ownership & Borrowing | Caller controls cloning, Cow for flexibility, avoid hidden allocations | [references/ownership-borrowing.md](references/ownership-borrowing.md) |
-| Unsafe Discipline | Contain unsafe in modules, SAFETY comments, minimize scope | [references/unsafe-discipline.md](references/unsafe-discipline.md) |
+| Unsafe Discipline | Contain unsafe in modules, SAFETY comments, POD/ByteValued zero-copy, volatile access, `safe fn` FFI | [references/unsafe-discipline.md](references/unsafe-discipline.md) |
 | Async & Concurrency | Send/Sync contracts, spawn_blocking, cancellation, waker correctness | [references/async-concurrency.md](references/async-concurrency.md) |
 | API Design | Trait conventions, builders, visibility, rustdoc, standard trait impls | [references/api-design.md](references/api-design.md) |
 | Performance & Profiling | Measure-first profiling, Criterion benchmarks, PGO workflow | [references/performance-profiling.md](references/performance-profiling.md) |
-| Type Patterns | Newtypes, phantom types, typestate, const generics, sealed traits | [references/type-patterns.md](references/type-patterns.md) |
-| Testing | Unit tests, property-based testing, mocking, fuzzing, Miri, coverage | [references/testing.md](references/testing.md) |
+| Type Patterns | Newtypes, phantom types, typestate, const generics, numeric cast safety, sealed traits | [references/type-patterns.md](references/type-patterns.md) |
+| Testing | Unit tests, property-based testing, mocking, fuzzing, Miri, Kani proofs, coverage | [references/testing.md](references/testing.md) |
 | Macros | Declarative vs proc macros, when to use, hygiene, debugging | [references/macros.md](references/macros.md) |
-| Build & Dependencies | Compile time, cargo features, workspace layout, security audits | [references/build-dependencies.md](references/build-dependencies.md) |
+| Build & Dependencies | Compile time, cargo features, workspace layout, workspace lints, panic strategy, security audits | [references/build-dependencies.md](references/build-dependencies.md) |
 | Review | Quick-reference checklist covering all topics | [references/review-checklist.md](references/review-checklist.md) |
 
 ## References

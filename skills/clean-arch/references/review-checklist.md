@@ -16,6 +16,7 @@
 - Orthogonality and reversibility checks
 - Action habits and risk laws
 - Production robustness checks
+- Security and trust boundary checks
 - Code smells quick reference
 - Testing best practices
 - Reporting heuristics
@@ -459,7 +460,7 @@ The goal is to decide whether the codebase can operate safely in real production
 
 - Are business invariants enforced in one authoritative place?
 - Can alternate entrypoints bypass core rules?
-- Are state transitions explicit and validated?
+- Are state transitions explicit and validated? (Prefer an enum + explicit transition table over scattered `if` checks — see [common-patterns.md](common-patterns.md).)
 - Are partial writes/side effects possible without compensation?
 
 ### Failure Handling
@@ -479,6 +480,29 @@ The goal is to decide whether the codebase can operate safely in real production
 - Does changing a rule require touching many layers?
 - Are interfaces stable and meaningful, or leaky and fragile?
 - Can behavior be tested without full infrastructure boot?
+
+## Security and Trust Boundary Checks
+
+Treat the trust boundary as a first-class architectural axis, distinct from layer boundaries. A trust boundary is any edge where data or control crosses from a less-trusted actor (untrusted input, a guest/tenant, a network peer, a serialized file) into your process. The review question is not "is this layered cleanly" but "how small is the attack surface, and is every crossing validated before it can do harm."
+
+### Review Questions
+
+- **Is untrusted input validated *before* it drives allocation, indexing, or deserialization?** A length/size field from an untrusted source must be bounds-checked before it is used to allocate or slice — otherwise it is a DoS or overflow primitive. (E.g. a hard `DESERIALIZATION_BYTES_LIMIT` cap checked before deserializing.)
+- **Is security policy declarative and resolved as early as possible?** Prefer a policy compiled/validated ahead of time (an allowlist compiled to a filter offline, config validated at load) over rules scattered through runtime code. Ahead-of-time policy shrinks the runtime attack surface and makes the policy auditable in one place.
+- **Is the boundary default-deny?** Does the system allow only what is explicitly permitted (allowlist), rather than blocking known-bad (denylist)? An allowlist fails closed when a new case appears; a denylist fails open.
+- **Is least privilege applied at the boundary?** Are privileges dropped, namespaces/sandboxes entered, and capabilities minimized *before* untrusted work begins, not after?
+- **Does defense-in-depth hold if one layer is bypassed?** If an attacker defeats input validation, does a second independent control (sandbox, syscall filter, capability drop) still contain them?
+- **Does a persisted/serialized blob carry only portable data, never live handles or trust?** State restored from disk or the network must be re-validated and reconstructed, not trusted as-is (see the persistence seam in [common-patterns.md](common-patterns.md)).
+
+### Severity
+
+- Untrusted size/index used before validation (allocation, slice, deserialize): **P0-P1** — DoS or memory-safety primitive.
+- Security policy that fails open (denylist where allowlist is required, missing default-deny): **P1**.
+- Privilege dropped after untrusted work begins, or a single control with no defense-in-depth: **P1-P2**.
+
+> Source: adapted from firecracker — offline-compiled seccomp syscall allowlist,
+> jailer privilege drop before VM start, and a deserialization size cap enforced
+> before untrusted snapshot data is parsed.
 
 ## Testing Best Practices
 

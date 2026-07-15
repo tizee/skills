@@ -55,6 +55,37 @@ urls:
   [dependencies]
   serde = { workspace = true }
   ```
+- **Centralize lint policy with `[workspace.lints]`.** Encode your team's discipline once at the root so every member inherits it, turning "reviewers should check X" into a compiler warning. This is how a large codebase enforces safety norms uniformly instead of hoping each author remembers.
+  ```toml
+  # root Cargo.toml
+  [workspace.lints.rust]
+  missing_debug_implementations = "warn"
+
+  [workspace.lints.clippy]
+  undocumented_unsafe_blocks = "warn"  # every unsafe block must justify itself
+  cast_possible_truncation = "warn"    # every narrowing cast is suspect
+  error_impl_error = "warn"            # nudge toward thiserror over hand-rolled
+  or_fun_call = "warn"                 # catch eager allocation in `unwrap_or`
+
+  # member Cargo.toml
+  [lints]
+  workspace = true
+  ```
+  Prefer `warn` + a `-D warnings` gate in CI over crate-level `#![deny(...)]`: `warn` keeps local iteration unblocked while CI still fails the build.
+- **Quarantine generated code.** Put bindgen / prost / build-script output under a `generated/` module and blanket-`#![allow(...)]` its lints, so machine noise never dilutes the strict lint policy applied to hand-written code.
+  ```rust
+  // src/.../generated/mod.rs
+  #![allow(non_camel_case_types, dead_code, clippy::all)]
+  ```
+- **Choose the panic strategy deliberately.** For security-critical or FFI-heavy binaries, `panic = "abort"` removes unwinding — smaller code, no unwind across an FFI or trust boundary, and a panic becomes a clean crash instead of an ambiguous half-unwound state.
+  ```toml
+  [profile.release]
+  panic = "abort"
+  ```
+
+> Source: adapted from firecracker — `[workspace.lints]` enforcing
+> `undocumented_unsafe_blocks`, `cast_*`, `error_impl_error`, `missing_debug_implementations`;
+> bindgen output isolated under `generated/`; `panic = "abort"` on all profiles.
 - **Consolidate integration tests.** A `tests/it/` structure with a single test binary avoids compiling many small binaries.
 - **Share CI caches wisely.** `sccache` works well for clean CI builds. Incremental compilation often hurts CI due to extra I/O overhead.
 

@@ -16,12 +16,16 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 - Does `Result<_, ()>` appear in any public API?
 - Do error types implement `Error + Send + Sync + 'static`?
 - Are error variants caller-actionable (retry, not-found, invalid) rather than dependency-origin (db, http)?
+- Is there one small error enum per subsystem (with `#[from]` translating the layer below at its boundary), rather than one flat app-wide enum mirroring every dependency?
+- Is `std::error::Error` derived via `thiserror` rather than hand-rolled?
 
 ## Unsafe
 
 - Is every `unsafe` block accompanied by a `// SAFETY:` comment?
 - Does every `pub unsafe fn` have a `# Safety` doc section?
 - Are unsafe-relevant fields private, contained within a module boundary?
+- Does a POD marker impl (`ByteValued`/`Pod`/`FromBytes`) sit on a `#[repr(C)]` type with no padding and no niche types (`bool`/`char`/`enum`/`NonZero`)?
+- Is memory a guest/device/other process can mutate accessed through `VolatileSlice`/`read_volatile`, not a plain `&T`?
 - Could a safe alternative replace the unsafe operation?
 
 ## Ownership & Borrowing
@@ -57,8 +61,18 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 
 - Does CI include `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo test --doc`?
 - Is `cargo audit` or `cargo deny` in the CI pipeline?
+- Is shared lint discipline centralized in `[workspace.lints]` rather than duplicated (or forgotten) per crate?
+- Is generated/bindgen code quarantined under a `generated/` module so its `#![allow(...)]` does not weaken the workspace lint policy?
 - Are Cargo features additive and documented?
 - Are new dependencies justified? Check maintenance status and transitive dependency count.
+
+## Numeric Safety
+
+- Are `as` casts used where a value could truncate, wrap, or lose its sign? Should they be `TryFrom`?
+- Are `cast_possible_truncation` / `cast_possible_wrap` / `cast_sign_loss` clippy lints enabled at the workspace level?
+- Where `#[allow(clippy::cast_*)]` suppresses a cast lint, is there a justification comment proving the cast is safe?
+- Is platform-dependent narrowing (e.g. `u64` -> `usize`) gated behind a `cfg(target_pointer_width)` helper rather than scattered `as`?
+- Is intentional wraparound expressed with `Wrapping<T>` / `wrapping_*` rather than a bare arithmetic op that hides overflow intent?
 
 ## Type Safety
 
@@ -74,6 +88,7 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 - Is property-based testing (proptest) used for invariant-heavy code?
 - Is `cargo fuzz` set up for parsers or code handling untrusted input?
 - Is Miri in CI for crates with `unsafe` blocks?
+- For code parsing untrusted input or implementing a protocol spec, would a Kani proof (`#[kani::proof]`, contracts) give stronger evidence than sampled tests?
 - Do integration tests use only the public API?
 
 ## Documentation

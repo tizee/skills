@@ -74,6 +74,62 @@ impl RingBuffer {
 }
 ```
 
+## Zero-Copy Memory: POD Marker Traits (`ByteValued`)
+
+Reading a C-layout struct straight out of a shared buffer (guest memory, mmap'd device region, wire format) is a recurring systems need. The idiom is a marker trait — `vm_memory::ByteValued`, `bytemuck::Pod`, `zerocopy::FromBytes` — that asserts a type is "plain old data": no padding, no invalid bit patterns, every byte sequence is a valid value. The single `unsafe impl` concentrates the proof obligation in one auditable place; every `read_obj`/`write_obj` on top of it is then safe.
+
+```rust
+#[repr(C)]                                  // stable, C-compatible layout
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Descriptor {
+    pub addr: u64,
+    pub len: u32,
+    pub flags: u16,
+    pub next: u16,                          // fields ordered so there is no padding
+}
+
+// SAFETY: `Descriptor` is `#[repr(C)]`, contains only integer fields, and has no
+// padding bytes, so any byte pattern of the right size is a valid `Descriptor`.
+unsafe impl ByteValued for Descriptor {}
+
+// Callers now stay in safe code:
+let desc: Descriptor = guest_mem.read_obj(addr)?;
+guest_mem.write_obj(desc, addr)?;
+```
+
+The two obligations to check on any such impl: `#[repr(C)]` (or `#[repr(transparent)]`) for a defined layout, and **no padding / no niche types** (no `bool`, no `char`, no `enum`, no `NonZero`) so every bit pattern is inhabited.
+
+### Volatile Access for Shared Memory
+
+Memory another agent (a guest, a device, another process) can mutate concurrently must be read through `VolatileSlice` / `read_volatile`, not a plain `&T`. A normal reference asserts the value is stable and unaliased — false for shared DMA memory, and the compiler may cache or reorder around it.
+
+```rust
+// SAFETY: the constructor guarantees `base`/`len` point to a valid, mapped
+// range of guest memory owned for the duration of this slice.
+let slice = unsafe { VolatileSlice::new(base, len) };
+```
+
+> Source: adapted from firecracker — `unsafe impl ByteValued for Descriptor`
+> (`#[repr(C)]`, "POD, no padding" SAFETY note), `read_obj`/`write_obj` over guest
+> memory, and `VolatileSlice` for guest-mutable DMA ranges.
+
+## Modern FFI: `safe fn` in `unsafe extern` (Rust 2024)
+
+Rust 2024 lets you mark individual C functions `safe` inside an `unsafe extern` block. Use it for imported functions that genuinely have *no* preconditions (query-only libc helpers), so callers skip the ceremonial `unsafe {}` while functions that *do* carry obligations still demand it — the safety signal stays meaningful instead of blanketing every FFI call.
+
+```rust
+// SAFETY: these libc functions read process/global state and have no preconditions.
+unsafe extern "C" {
+    safe fn __libc_current_sigrtmin() -> c_int;
+    safe fn __libc_current_sigrtmax() -> c_int;
+}
+
+let min = __libc_current_sigrtmin(); // no `unsafe` block needed
+```
+
+> Source: adapted from firecracker — `safe fn` used for precondition-free libc
+> and libseccomp bindings inside `unsafe extern "C"` blocks.
+
 ## Lint Enforcement
 
 Use crate-level attributes to enforce documentation discipline:

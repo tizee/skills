@@ -170,10 +170,69 @@ pub enum Error {
 
 Downstream code must include a wildcard arm in match, so new variants don't cause compile errors.
 
+## Numeric Conversions: `try_from` over `as`
+
+The `as` operator silently truncates, wraps, or changes sign. Where a value crosses a width or trust boundary (untrusted input, syscall returns, buffer sizes, offsets), a silent truncation is a correctness or security bug, not a rounding detail. Treat every `as` cast as suspect and prefer fallible `TryFrom`.
+
+Enforce this project-wide with clippy lints instead of relying on review vigilance:
+
+```toml
+# workspace Cargo.toml
+[workspace.lints.clippy]
+cast_possible_truncation = "warn"  # u64 -> u32 may drop high bits
+cast_possible_wrap = "warn"        # u32 -> i32 may become negative
+cast_sign_loss = "warn"            # i32 -> u32 may reinterpret the sign bit
+```
+
+With the lints on, narrowing conversions must go through `TryFrom`, making the overflow path explicit and recoverable:
+
+```rust
+// Fails loudly if the length does not fit a u32, instead of silently truncating.
+let count = u32::try_from(items.len())?;
+let fd = RawFd::try_from(raw_return)?;
+```
+
+When a cast is *provably* safe, suppress the lint at the single call site with a justification, never with a blanket crate-level `allow`:
+
+```rust
+// A struct's compile-time size is bounded well below u32::MAX.
+#[allow(clippy::cast_possible_truncation)]
+const REQ_SIZE: u32 = std::mem::size_of::<Request>() as u32;
+```
+
+For conversions that are sound only on a specific platform, gate a helper on the target width so the assumption is stated once, centrally, and becomes a compile error elsewhere rather than a silent truncation:
+
+```rust
+/// Convert a `u64` to `usize`. Sound only on 64-bit targets; the `cfg` turns the
+/// assumption into a compile error on narrower platforms.
+#[cfg(target_pointer_width = "64")]
+#[inline]
+pub const fn u64_to_usize(num: u64) -> usize {
+    num as usize
+}
+```
+
+### Intentional Wraparound: `Wrapping<T>`
+
+When arithmetic *should* wrap (ring-buffer indices, sequence counters), encode it in the type. `Wrapping<u16>` documents the intent and opts out of debug overflow panics, whereas a bare `u16 += 1` leaves the reader unable to tell a designed wrap from an overflow bug.
+
+```rust
+pub struct RingCursor {
+    next_avail: std::num::Wrapping<u16>, // wraps by protocol design
+    next_used: std::num::Wrapping<u16>,
+}
+```
+
+> Source: adapted from firecracker — `cast_*` workspace lints, the
+> `target_pointer_width`-gated `u64_to_usize` helper, and `Wrapping<u16>` virtio
+> ring indices.
+
 ## When to Reach for These Patterns
 
 | Problem | Pattern |
 | --- | --- |
+| Silent truncation/wrap across a width or trust boundary | `TryFrom` over `as` |
+| Arithmetic that must wrap by design | `Wrapping<T>` |
 | Mixing up units or IDs of the same primitive type | Newtype |
 | Invalid state transitions at runtime | Typestate (phantom types) |
 | Fixed-size stack buffers | Const generics |

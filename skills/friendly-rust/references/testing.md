@@ -142,6 +142,63 @@ cargo +nightly miri test
 
 Miri runs significantly slower than native execution, so it's typically used on targeted test suites rather than the full suite. Add it to CI for any crate containing `unsafe`.
 
+## Kani: Bounded Model Checking and Proofs
+
+Miri and fuzzing *sample* the input space; Kani *exhausts* a bounded slice of it. Kani translates a harness into a SAT/SMT problem and proves that, for every input the solver can construct, no panic, overflow, or assertion failure occurs. Reach for it on code that parses attacker-controlled input or must conform to a protocol spec, where "we tried a million random cases" is weaker evidence than a proof.
+
+Harnesses live in `#[cfg(kani)]` modules, mirroring `#[cfg(test)]`. `kani::any()` produces a symbolic value standing for *all* values of its type:
+
+```rust
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    #[kani::proof]
+    #[kani::unwind(0)]
+    fn add_used_advances_cursor_exactly_once() {
+        let mut queue: Queue = kani::any();      // every reachable queue state
+        let index: u16 = kani::any();
+        let used = queue.next_used;
+        if queue.add_used(index, kani::any()).is_ok() {
+            assert_eq!(queue.next_used, used + Wrapping(1));
+        } else {
+            assert_eq!(queue.next_used, used);   // failure leaves state untouched
+            assert!(index >= queue.size);        // and only fails out of bounds
+        }
+    }
+}
+```
+
+### Function Contracts
+
+Attach `requires` (preconditions) and `ensures` (postconditions) to a function, then prove the contract holds for all inputs. Verified functions can be *stubbed* by their contract in downstream proofs, keeping each proof tractable:
+
+```rust
+#[cfg_attr(kani, kani::requires(x > 0 && y > 0))]
+#[cfg_attr(kani, kani::ensures(|&r| r != 0 && x % r == 0 && y % r == 0))]
+fn gcd(x: u64, y: u64) -> u64 { /* ... */ }
+
+#[kani::proof_for_contract(gcd)]
+fn gcd_contract_harness() { /* kani::any() inputs */ }
+```
+
+### Taming Non-Determinism
+
+Real code touches the clock, FFI, or the OS, which Kani cannot model. Stub those out so the proof stays about *your* logic:
+
+```rust
+#[kani::proof]
+#[kani::stub(std::time::Instant::now, stubs::fixed_instant)]
+#[kani::stub_verified(gcd)]   // reuse gcd's proven contract, don't re-explore it
+fn verify_token_bucket_new() { /* ... */ }
+```
+
+Bound loops with `#[kani::unwind(N)]` and constrain inputs with `kani::any_where(...)` to keep the solver's state space finite. Run harnesses in CI (`cargo kani`) for guest-facing or safety-critical crates — it is the practical rung above Miri on the verification ladder.
+
+> Source: adapted from firecracker — Kani proofs of virtio queue `add_used` /
+> notification-suppression (VirtIO spec 2.6.7.2), the `gcd` contract, and the
+> `TokenBucket::new` invariant with a stubbed `Instant::now`.
+
 ## Coverage
 
 `cargo-llvm-cov` and `cargo-tarpaulin` generate coverage reports. Coverage guides testing effort but is not a quality metric -- assertion quality matters more than line counting. A test that executes every line but asserts nothing is worse than no test.

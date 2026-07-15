@@ -94,6 +94,7 @@ These premises explain *why* the checks below matter. A reviewer who internalize
 | SOLID Principles | SRP, OCP, LSP, ISP, DIP checks | [references/review-checklist.md](references/review-checklist.md) |
 | Module Depth | Deep vs shallow modules, pass-through methods, classitis | [references/review-checklist.md](references/review-checklist.md) |
 | Information Hiding | Information leakage, temporal decomposition, shared format assumptions | [references/review-checklist.md](references/review-checklist.md) |
+| Security & Trust Boundaries | Attack-surface minimization, default-deny/allowlist, ahead-of-time policy, least privilege, defense-in-depth | [references/review-checklist.md](references/review-checklist.md) |
 | Code Smells | Bloaters, Object-Orientation Abusers, Change Preventers, Dispensables, Couplers | [references/review-checklist.md](references/review-checklist.md) |
 | Cross-Layer Chaos | Split invariant, hidden business decisions, transport-driven behavior | [references/review-checklist.md](references/review-checklist.md) |
 | KISS / Over-Engineering | Simplicity checks, good vs bad complexity | [references/review-checklist.md](references/review-checklist.md) |
@@ -106,7 +107,7 @@ These premises explain *why* the checks below matter. A reviewer who internalize
 | Construction Rules | CC2 rule domains: naming, variables, constants, control flow, comments, defensive programming, errors | [references/code-construction-rules.md](references/code-construction-rules.md) |
 | Construction Anti-Patterns | Giant functions, hidden side effects, magic numbers, deep nesting, fallthrough — with worked examples | [references/code-construction-rules.md](references/code-construction-rules.md) |
 | Concurrency | Shared mutable state, compound-atomicity assumptions, missing concurrency contracts | [references/code-construction-rules.md](references/code-construction-rules.md) |
-| Common Patterns | Dependency violation, God Class, Feature Envy solutions | [references/common-patterns.md](references/common-patterns.md) |
+| Common Patterns | Dependency violation, God Class, Feature Envy, control-plane isolation, persistence seam, transition tables | [references/common-patterns.md](references/common-patterns.md) |
 | Decision Tables | Extract Method vs Class, Inheritance vs Composition, Repo vs Service | [references/common-patterns.md](references/common-patterns.md) |
 | Production Checks | Correctness, failure handling, observability, change safety | [references/review-checklist.md](references/review-checklist.md) |
 
