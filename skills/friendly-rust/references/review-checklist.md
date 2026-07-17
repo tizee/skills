@@ -56,6 +56,8 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 - Are performance claims backed by benchmarks?
 - Is there premature optimization without profiling evidence?
 - Are there large enum variants that inflate the enum size? (Clippy: `large_enum_variant`)
+- Zero allocation is not zero copy: does the hot path move the same bytes through memory more than once (write to a buffer, then re-read to consume)?
+- Is data materialized into a collection -- including a *reused scratch buffer* -- between a producer and a consumer that iterates it exactly once? Stream it with an `impl Iterator` return instead; materialize only for multi-pass, reordering, or cross-thread handoff.
 
 ## Build & Dependencies
 

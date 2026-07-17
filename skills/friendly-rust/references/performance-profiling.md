@@ -117,6 +117,67 @@ let filtered: Vec<&str> = users.iter()
     .collect();
 ```
 
+## First Principles: Memory Traffic Is the Cost
+
+Every byte moved through the memory hierarchy costs bandwidth and energy,
+whether or not an allocator was involved. Reason about hot paths in terms of
+**how many times the same data crosses memory**, not just how many times
+`malloc` runs:
+
+- **Zero allocation is not zero copy.** A reused scratch buffer (`Vec` field,
+  `clear()`-not-drop, capacity retained) eliminates malloc/free churn but
+  still writes every element out to memory and reads it back in a second
+  pass. On a hot path producing thousands of small items per iteration, that
+  write-then-reread is two full trips through L1/L2 -- and it evicts the
+  producer's still-warm data on the way.
+- **Count passes over the data, not allocations.** The question is "how many
+  times does each element transit memory between its producer and its final
+  sink?" One pass is the floor; every extra materialization adds a round
+  trip.
+- **If the consumer is single-pass, stream.** When the only consumer of a
+  collection iterates it exactly once, front to back, the collection is pure
+  overhead: replace the `Vec` handoff with an `impl Iterator` return and let
+  each element flow producer → transform → sink while it is still in
+  registers. RPIT + `flat_map`/`filter_map` monomorphize to the same machine
+  code as a hand-written nested loop.
+- **Materialize only for multi-pass or reordering needs.** Sorting, binary
+  search, random access, retry/replay, or handing data across a thread
+  boundary genuinely require an owned collection. Single forward consumption
+  never does.
+
+### Anti-Pattern: Materializing Between Producer and Single-Pass Consumer
+
+```rust
+// "Optimized": the scratch Vec is reused across frames, zero allocation in
+// steady state -- yet every changed cell is written to the Vec and read
+// back, doubling memory traffic on the hot path.
+fn end_frame(&mut self) -> String {
+    self.scratch.clear();
+    diff_into(&self.prev, &self.curr, &mut self.scratch); // pass 1: write all
+    serialize(&self.scratch)                              // pass 2: read all
+}
+```
+
+### Positive Pattern: Stream With `impl Iterator`
+
+```rust
+// Each changed cell flows straight from the diff into the serializer while
+// still in registers. No scratch state, no second pass. Measured ~6% faster
+// on a damage-heavy frame diff than the reused-Vec version above.
+fn diff_iter<'a>(prev: &'a Grid, curr: &'a Grid) -> impl Iterator<Item = Update> + 'a {
+    (0..curr.rows()).flat_map(move |y| {
+        row_span(prev, curr, y).filter_map(move |x| changed_cell(prev, curr, x, y))
+    })
+}
+
+fn end_frame(&mut self) -> String {
+    serialize(diff_iter(&self.prev, &self.curr)) // single pass
+}
+```
+
+The consumer takes `impl Iterator<Item = T>` instead of `&[T]`; a test that
+wants the materialized form calls `.collect()` at its own edge.
+
 ## Semantic Methods Over Index Arithmetic
 
 Prefer `first()`, `last()`, `split_first()` over `get(0)`, `get(len - 1)`. Semantic methods communicate intent and handle empty cases correctly.
