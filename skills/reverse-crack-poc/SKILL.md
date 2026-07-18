@@ -1,15 +1,17 @@
 ---
 name: reverse-crack-poc
 description: >-
-  Guide a reverse-engineering proof-of-concept on a macOS crackme / license-check binary, for learning and interview
-  preparation. Use this whenever the user is analyzing a app's
-  authorization / license-gating module and wants to reconstruct its gating
-  model, call chain, architecture differences (arm64 / x86_64 / universal
-  Mach-O), and validate a minimal binary patch with LLDB and code signing.
-  Trigger on mentions of crackme, license-check PoC, Mach-O / IDA / LLDB /
-  objc_msgSend analysis, "find the gating branch", patch validation, universal
-  binary slices, keygen-me vs patch-me, or CTF-style binary patching — even when
-  the user does not say the word "skill".
+  Guide a reverse-engineering proof-of-concept on a macOS crackme or local
+  license-check binary for learning and interview preparation. Use this whenever
+  the user is analyzing an app's authorization or license-gating module and wants
+  to reconstruct its gating model, call chain, architecture differences (arm64,
+  x86_64, or universal Mach-O), or validate a minimal patch with LLDB and code
+  signing. Also use it for debugger-free keygen/patch automation, semantic
+  signatures across app versions, fail-closed compatibility profiles, or
+  diagnosing why a binary matcher broke after a minor update. Trigger on crackme,
+  license-check PoC, Mach-O, IDA, LLDB, objc_msgSend, gating branches, patch
+  validation, universal slices, keygen-me vs patch-me, semantic patch locators,
+  or CTF-style binary patching — even when the user does not say "skill".
 ---
 
 # Reverse-Crack PoC
@@ -20,16 +22,8 @@ the call chain, architecture differences, and how to validate a minimal patch.
 
 ## Scope and intent (read first)
 
-This skill operates **only** on binaries the user wrote themselves or that are
-explicitly sanitized demo / CTF targets (symbol names, addresses, paths, and
-product names already anonymized). It is an educational tool for understanding
-how local license checks are structured and why offline gating is inherently
-breakable.
-
-If a request targets real third-party commercial software, or asks to defeat
-licensing on software the user does not own, do not proceed — redirect to a
-demo / crackme target instead. The whole point is that the *methodology*
-transfers; the *target* must be one the user is entitled to analyze.
+It is an educational tool for understanding how local license checks are structured and why offline gating is inherently
+breakable. The whole point is that the *methodology* transfers.
 
 ## The core idea (the through-line of every step)
 
@@ -179,6 +173,133 @@ state source -> call convention -> gating decision -> arch difference -> patch r
    Confirm the linchpin in memory before committing the change to the file and
    re-signing. Watch for anti-debug (`ptrace(PT_DENY_ATTACH)`, `sysctl`
    `P_TRACED`) that blocks LLDB attach.
+
+## From one working build to a portable PoC
+
+A fixed offset or one successful byte patch proves only one binary. When the
+PoC becomes a reusable keygen or patcher, define a **compatibility profile** from
+business semantics rather than treating one compiler layout as an API.
+
+### Rank signature evidence by stability
+
+| evidence | stability across builds | how to use it |
+|---|---|---|
+| absolute vmaddr, fat-slice offset, branch displacement | very low | output/debug evidence only; never an input contract |
+| stack layout, register allocation, relocation immediates | low | mask or derive when they do not carry business meaning |
+| obfuscated-string initializer bytes | low | expect regeneration; do not confuse ciphertext layout with plaintext semantics |
+| unique caller argument setup and algorithm enum | high | use as the first semantic anchor |
+| caller-to-helper control-flow edge | high | decode and follow it instead of scanning for an unrelated lookalike |
+| ordered operations and repeated call-target relationships | high | validate data flow and call topology |
+| original/patched function-entry states | high | make patching explicit and idempotent |
+
+A long exact instruction sequence is not automatically a semantic signature.
+If it pins fixed indices for relocation words, register choices, or generated
+obfuscator setup, it is still a build fingerprint and will break on harmless
+recompilation.
+
+### Build a caller-linked semantic locator
+
+For arm64, prefer this sequence:
+
+1. Parse the correct thin/fat Mach-O slice and retain its file bounds.
+2. Find a stable caller anchor that includes meaningful argument setup, such as
+   an algorithm enum or schema discriminator.
+3. Decode the caller's `bl` instruction. Sign-extend `imm26`, multiply it by
+   four, and add it to the address of the branch instruction itself.
+4. Require the target to be four-byte aligned and fully inside the selected
+   slice before reading it.
+5. Validate the helper by semantic phases: argument preservation, constructor /
+   algorithm setup, ordered input additions, result extraction, truncation,
+   cleanup, and return.
+6. Compare call-target relationships. If the same logical operation appears
+   three times, require all three `bl` instructions to resolve to the same
+   target; also require distinct roles to remain distinct where proven.
+7. Require exactly one valid caller/helper pair. Zero or multiple candidates are
+   profile failures, never a reason to pick the first match.
+8. Recognize both known entry states (`original` and `patched`) and make reruns
+   idempotent. Any third state is an explicit error.
+
+Use bounded variable regions only where evidence justifies them. For example, a
+per-build string initializer may vary in length, but the stable decoder call and
+post-decoder data flow can still anchor the suffix. Bound the search window and
+require the complete suffix exactly once so a wildcard cannot swallow arbitrary
+code.
+
+### Write the compatibility contract before relaxing a matcher
+
+State three separate sets:
+
+- **Proven invariant:** algorithm enum, discriminator, call ordering, truncation,
+  output format, or another behavior confirmed by static/dynamic evidence.
+- **Tolerated build drift:** vmaddrs, slice offsets, `bl` immediates, relocations,
+  stack-guard addresses, and the observed variable compiler/obfuscator region.
+- **Unproven blind spot:** a value hidden behind an opaque decoder, VM, runtime
+  service, or encrypted table whose plaintext has not been recovered.
+
+Opaque values need an honest decision. Either reverse/emulate the decoder,
+capture the value during natural execution and establish a known vector, or
+publish the blind spot. Do not wildcard opaque bytes and then claim the matcher
+will detect every algorithm change. Phrase future support as: compatible while
+the recognizable profile remains intact; detectable drift fails closed.
+
+### Drive portable matchers with behavior tests
+
+Use TDD when turning analysis into automation:
+
+1. Keep compact fixtures derived from at least one old compatible build and the
+   newly drifting build. Fixtures should preserve the relevant control-flow edge,
+   not merely place caller and helper bytes independently in one blob.
+2. RED: prove the current matcher rejects the new semantically equivalent layout.
+3. GREEN: make the smallest semantic relaxation that accepts both builds.
+4. Add negative mutations that must still fail:
+   - changed algorithm enum or discriminator;
+   - missing or duplicate caller/helper pairs;
+   - out-of-bounds or unaligned branch target;
+   - changed ordered operation or repeated call-target topology;
+   - unknown function-entry bytes.
+5. Run real binaries as integration checks, while keeping unit tests offline and
+   deterministic. Report discovered offsets as evidence, never fixtures consumed
+   by the patcher.
+
+Tests should describe user-visible compatibility and rejection behavior. A test
+that only mirrors private matcher tables will preserve the overfitting instead of
+preventing it.
+
+### Validate mutation and code signing in the right order
+
+Use a disposable copy and preserve the pristine/installed app as read-only:
+
+```
+read-only profile check on original
+  -> copy to a temporary work bundle
+  -> remove analysis companion files that would pollute signing
+  -> patch without signing
+  -> assert the exact changed byte range
+  -> ad-hoc sign
+  -> codesign verification
+  -> rerun locator (must report patched/idempotent)
+  -> launch and verify actual behavior/persistence
+```
+
+The byte-diff assertion belongs **before** `codesign`: replacing a Developer ID
+signature with an ad-hoc signature legitimately changes the code-signature region,
+so a post-sign whole-file diff cannot prove that only the intended instruction
+bytes were patched. Never patch the installed/reference binary to save a copy.
+
+### Protect generated artifacts from failed preflight checks
+
+Shell redirection opens and truncates its target before the program validates
+its inputs. A failed profile check can therefore erase the previous known-good
+artifact. Run a read-only preflight first, or publish atomically:
+
+```bash
+tool --check /path/to/Demo.app
+tool --app /path/to/Demo.app > output.txt.tmp && mv output.txt.tmp output.txt
+```
+
+Keep deterministic generation separate from host probing and app inspection so
+unit tests can compare payload/envelope content without invoking a debugger or
+mutating an application bundle.
 
 ## Two insights worth surfacing explicitly
 
