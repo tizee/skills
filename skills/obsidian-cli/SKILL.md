@@ -58,6 +58,27 @@ Commands target the most recently focused vault by default. Use `vault=<name>` a
 obsidian vault="My Vault" search query="test"
 ```
 
+## Editing existing notes — edit the file in place
+
+Vault notes are plain markdown files on disk. Once a note exists and you know its path, **edit the file in place with your normal file-editing tools instead of round-tripping through the CLI** — Obsidian's file watcher picks up external changes automatically (including while the note is open in a tab). The CLI has no in-place edit command; `create ... overwrite` rewrites the whole file and forces the temp-file/shell-escaping dance for no benefit.
+
+**Resolving the absolute path**: vault root + CLI-relative path, e.g. vault `development` at `/Users/<user>/Documents/obsidian/development` → note `pages/My Note.md` is `/Users/<user>/Documents/obsidian/development/pages/My Note.md`. If unsure of the vault root:
+
+```bash
+obsidian eval code="app.vault.adapter.getBasePath()"
+```
+
+**Deleting a file** (no CLI delete command): run JS in the app context:
+
+```bash
+obsidian eval code="app.vault.delete(app.vault.getAbstractFileByPath('pages/My Note.md'))"
+```
+
+**Still use the CLI for:**
+- Creating notes with templates (`<% tp.* %>` Templater resolution requires the app)
+- Frontmatter `property:set` (validates YAML types: `list` vs `text`)
+- Read/search/backlinks/tags (no path needed — `file=` resolves like a wikilink)
+
 ## Creating notes
 
 ### File placement
@@ -84,13 +105,15 @@ When `template=` is provided, the CLI triggers Obsidian's template insertion (in
 # 1. Create with template (resolves all Templater variables)
 obsidian create path="pages/My Note.md" template="tech-note-template" silent
 
-# 2. Append or overwrite to fill in body content
-obsidian create path="pages/My Note.md" content="..." overwrite silent
+# 2. Fill in the body by editing the note file in place at its absolute path
+#    (template resolution is done; no need to round-trip content through the CLI)
 ```
 
 To discover available templates: `obsidian templates`
 
 ### Writing content with special characters (IMPORTANT)
+
+**Applies only when content passes through the shell (CLI `create`/`append`).** Editing the note file in place avoids shell interpretation entirely — no escaping needed.
 
 **Problem:** When passing `content="..."` directly, shell interprets special characters before the CLI sees them. Characters like `|`, `→`, `─`, `┌`, `└`, `│`, `▶`, `#` get treated as shell operators, causing:
 - ASCII art tables to be replaced with command output
@@ -102,8 +125,7 @@ To discover available templates: `obsidian templates`
 **Solution:** Write content to a temp file, then pass via `$(cat file)`:
 
 ```bash
-# 1. Write content to temp file
-Write(file_path="/tmp/note-content.md", content="...\n---...\n")
+# 1. Write content to a temp file outside the vault, e.g. /tmp/note-content.md
 
 # 2. Pass content from file (shell won't interpret special chars)
 CONTENT=$(cat /tmp/note-content.md)
@@ -191,10 +213,7 @@ Use when the user or agent wants to capture a learning, solution, or discovery a
    obsidian vault="<vault>" read file="<Note Title>"
    ```
 
-5. **Write body content** — overwrite with full content (frontmatter + body) since template sections are now resolved:
-   ```bash
-   obsidian vault="<vault>" create path="<notes-folder>/<Note Title>.md" overwrite content="<full note content with frontmatter>" silent
-   ```
+5. **Write body content** — the template is now resolved. Edit the note file in place at its absolute path (see "Editing existing notes" for path resolution); no temp-file/`$(cat)` dance needed.
 
 6. **Final verification**:
    ```bash
@@ -216,22 +235,26 @@ obsidian vault="development" property:set name="tags" type="list" value="git, ho
 # 4. Read back (verify Templater resolved)
 obsidian vault="development" read file="Git - Hook chaining"
 
-# 5. Overwrite with full content (preserve resolved frontmatter, fill in body)
-obsidian vault="development" create path="pages/Git - Hook chaining.md" overwrite content="---\ncreation date: 2026-03-11\ntags:\n  - git\n  - hooks\n---\n\n# Git - Hook chaining\n\n## What is it?\n\n..." silent
+# 5. Write body content (edit the file in place at its absolute path)
+#    e.g. /Users/<user>/Documents/obsidian/development/pages/Git - Hook chaining.md
+#    with frontmatter (creation date, tags) + body
 
 # 6. Verify
 obsidian vault="development" read file="Git - Hook chaining"
 ```
 
-### Workflow 2: Append to an existing note
+### Workflow 2: Edit an existing note
 
-Use when adding new content to an existing note (e.g. appending a log entry, adding a section).
+Use when adding or updating content in an existing note. **Edit the file in place at its absolute path** — the watcher syncs the change into Obsidian automatically. The CLI `append` only ever adds at the end of the file, so use it just for tail-append cases (e.g. a quick log line):
 
 ```bash
-# Append a new section
+# Preferred — edit the file in place (insert/update anywhere in the note)
+#   /Users/<user>/Documents/obsidian/development/pages/My Note.md
+
+# Tail append only (CLI)
 obsidian vault="<vault>" append file="<Note Title>" content="\n## New Section\n\nContent here."
 
-# Append a task to daily note
+# Daily notes
 obsidian vault="<vault>" daily:append content="- [ ] Review PR #42"
 ```
 
