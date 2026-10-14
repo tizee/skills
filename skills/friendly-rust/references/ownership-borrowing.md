@@ -3,6 +3,8 @@ urls:
   - https://rust-lang.github.io/api-guidelines/flexibility.html
   - https://doc.rust-lang.org/std/borrow/enum.Cow.html
   - https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html
+  - https://doc.rust-lang.org/nomicon/subtyping.html
+  - https://github.com/rust-lang/rust/issues/164250
 ---
 
 # Ownership & Borrowing
@@ -204,6 +206,62 @@ Rust elides lifetimes in common patterns: single reference parameter, or `&self`
 - Avoid overusing `'static` in generic bounds -- it often indicates a design that forces unnecessary ownership.
 - Keep lifetime annotations minimal; if the compiler doesn't require them, removing them improves readability.
 
+## Drop Must Not Let Values Escape
+
+`Drop::drop` runs implicitly, so the borrow checker sees no call site where it can check bounds. Keep `drop` to releasing resources the value owns: close, notify, flush, decrement. Do not move generic `T` out of `self` into anything that outlives `self`: a `static`, a global registry, a channel, a `thread::spawn`, or `mem::forget`.
+
+This is a style rule and a soundness guard. rust-lang/rust#164250 (`I-unsound`, present for about 11 years) shows the risk. A struct bound such as `T: 'static` is not checked when a field gets its value by covariant assignment. A `Drop` impl that stores `T` in a global can then keep a dangling reference, all in safe code. `#![forbid(unsafe_code)]` does not catch it.
+
+### Anti-Pattern: Drop Moves `T` Into a Global
+
+```rust
+static KEPT: Mutex<Vec<Box<dyn Any + Send>>> = Mutex::new(Vec::new());
+
+struct Q<T: 'static + Send>(Option<T>);
+
+impl<T: 'static + Send> Drop for Q<T> {
+    fn drop(&mut self) {
+        if let Some(t) = self.0.take() {
+            KEPT.lock().unwrap().push(Box::new(t)); // T escapes `self`
+        }
+    }
+}
+
+let l = String::from("short-lived");
+let mut q = Q(None);
+q.0 = Some(&l); // compiles: `T = &'short String` despite `T: 'static`
+// `l` and `q` drop -> KEPT holds a dangling `&String` (use-after-free).
+```
+
+### Positive Pattern: Escape Through an Explicit Method
+
+```rust
+struct Q<T>(Option<T>);
+
+impl<T: Send + 'static> Q<T> {
+    /// Moves the value into the global keep-list.
+    fn keep(mut self) {
+        if let Some(t) = self.0.take() {
+            KEPT.lock().unwrap().push(Box::new(t));
+        }
+    }
+}
+
+let l = String::from("short-lived");
+let mut q = Q(None);
+q.0 = Some(&l);
+q.keep(); // error[E0597]: `l` does not live long enough
+```
+
+The call site makes the compiler check `T: 'static`. Also follow the general rule: put bounds on the `impl` that needs them, not on the struct.
+
+### Do Not Treat the Compiler as a Proof
+
+Safe Rust excludes UB only if the compiler is sound, and rustc has known soundness holes. See the open issues with the [`I-unsound`](https://github.com/rust-lang/rust/labels/I-unsound) label. Most of these holes need strange code such as variance tricks, implied bounds, or a `Drop` with side effects. So:
+
+- Write plain code. Do not use lifetime or variance tricks to make borrowck accept a design.
+- If a design compiles but you think it should not, believe your reasoning. Reduce it to a minimal case and run it under Miri or ASan (`RUSTFLAGS=-Zsanitizer=address`, nightly).
+
 ## Interior Mutability: Use With Care
 
 `RefCell` and `Cell` allow mutation through shared references, but they shift borrow checking to runtime:
@@ -222,3 +280,4 @@ Look for these patterns during review:
 - Excessive `.clone()` to satisfy the borrow checker -- often signals a design that mixes read and write responsibilities.
 - Cloning inside loops when borrowing would suffice.
 - `'static` bounds where a shorter lifetime would work.
+- A `Drop` impl that moves `T` out of `self` into a `static`, a registry, a channel, or a spawned thread.

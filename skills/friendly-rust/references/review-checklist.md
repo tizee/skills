@@ -33,6 +33,8 @@ Quick-reference questions for reviewing Rust code. Not every question applies to
 - Do function signatures reflect actual ownership needs (owned vs borrowed)?
 - Are there hidden `.clone()` / `.to_string()` inside functions that take references?
 - Is `Cow` used only where borrowed-or-owned flexibility is genuinely needed?
+- Does every `Drop` impl only release what the value owns? Moving `T` into a `static`, a registry, a channel, or a thread from `drop` can bypass lifetime bounds (rust-lang/rust#164250). Use an explicit consuming method instead.
+- Does the code rely on lifetime or variance tricks that "surprisingly compile"? Treat that as a design smell, not a proof of safety.
 
 ## Async & Concurrency
 

@@ -35,7 +35,7 @@ Concise guidance for writing Rust code that is correct, idiomatic, and pleasant 
 | --- | --- | --- |
 | Principles | Correctness first, work with the type system, encode invariants in types | [references/principles.md](references/principles.md) |
 | Error Design | Per-subsystem error enums, `#[from]` boundary translation, displaydoc, Result over panics | [references/error-design.md](references/error-design.md) |
-| Ownership & Borrowing | Caller controls cloning, Cow for flexibility, avoid hidden allocations | [references/ownership-borrowing.md](references/ownership-borrowing.md) |
+| Ownership & Borrowing | Caller controls cloning, Cow for flexibility, avoid hidden allocations, Drop must not let values escape | [references/ownership-borrowing.md](references/ownership-borrowing.md) |
 | Unsafe Discipline | Contain unsafe in modules, SAFETY comments, POD/ByteValued zero-copy, volatile access, `safe fn` FFI | [references/unsafe-discipline.md](references/unsafe-discipline.md) |
 | Async & Concurrency | Send/Sync contracts, spawn_blocking, cancellation, waker correctness | [references/async-concurrency.md](references/async-concurrency.md) |
 | API Design | Trait conventions, builders, visibility, rustdoc, standard trait impls | [references/api-design.md](references/api-design.md) |
