@@ -1,8 +1,6 @@
 ---
 name: friendly-cpp
 description: Guardrail guidance for writing, refactoring, and reviewing friendly modern C++ (C++17/20/23) that is memory-safe, maintainable, and free of common anti-patterns. Built for auditing C++ projects written by unconstrained coding agents -- ownership and lifetime (RAII, unique_ptr/shared_ptr/weak_ptr, string_view/span borrows), error handling, class and API design, UB, headers and CMake, sanitizers and static analysis. Invoke explicitly for C++ (.cpp/.cc/.hpp/.h in a C++ project) work.
-disable-model-invocation: true
-user-invocable: true
 ---
 
 # friendly-cpp
