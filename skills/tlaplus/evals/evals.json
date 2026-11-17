@@ -1,0 +1,50 @@
+{
+  "skill_name": "tlaplus",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We ship a cross-device notification service. One notification is created once, then fanned out to every device. Devices go offline and reconnect. The current flow is:\n\n- createNotification(msg): for each device, append msg to that device's outbox.\n- deliver(device): read one msg from the device's outbox, send it, then remove it from the outbox.\n- on reconnect, sync(device): resend every message in the outbox.\n- the client keeps a set of delivered message ids and ignores duplicates.\n\nUsers report duplicate notifications on one device after reconnect, and lost notifications when a device is offline during fan-out.\n\nModel this in TLA+. Check (a) no duplicate delivery on a device, (b) no lost notification after fan-out, (c) a device that reconnects eventually receives every message. Run TLC. Tell me which reports are real protocol bugs, show the shortest counterexample, and give the minimal fix. Put the spec under specs/notifications/ with a README. If the model passes, break the dedupe or the outbox logic and show the property fails, so I know the model is not vacuous.",
+      "expected_output": "A runnable TLA+ spec and cfg under specs/notifications/, a TLC run, a concrete counterexample or a justified pass, a root-cause fix, and a README with assumptions and commands.",
+      "files": [],
+      "expectations": [
+        "A TLA+ spec and TLC config exist under specs/notifications/.",
+        "The spec defines TypeOK and at least one safety invariant.",
+        "TLC was actually run on the spec, and the command and output are included.",
+        "The report names a concrete counterexample interleaving, or explains why a reported symptom is not reproducible in the model.",
+        "The report maps the finding to a code path: remove-before-send, offline fan-out, or a dedupe gap.",
+        "The proposed fix addresses the root cause (ack before remove, persist the outbox, or dedupe by id), not only a retry or a sleep.",
+        "The README states the model scope, assumptions, and how to run the spec.",
+        "The model is bounded with small constants and does not put an unbounded Nat or Seq in the state."
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Our job queue uses SQS-style visibility timeouts. A worker calls claim(), which sets a 30s visibility timeout and returns a job. It processes the job, then calls ack(jobId). If processing takes longer than 30s, the job becomes visible again and another worker can claim it. We added an idempotency key on the side effect, but we still see duplicate side effects.\n\nModel the claim/ack/timeout protocol in TLA+. Check that no job is processed by two workers at once, and that every claimed job eventually completes. Run TLC and give me the shortest counterexample trace. Then give the minimal code-level fix and the regression test I should add. Put the spec under specs/job-queue/ with a README. Bound the model so TLC terminates.",
+      "expected_output": "A runnable TLA+ spec and cfg under specs/job-queue/, a TLC counterexample showing the visibility-timeout race, a fencing-token or atomic-claim fix, and a regression test plan.",
+      "files": [],
+      "expectations": [
+        "A TLA+ spec and TLC config exist under specs/job-queue/.",
+        "The spec defines TypeOK and a no-double-processing safety invariant.",
+        "TLC was actually run and found a counterexample, or a bounded pass is justified with the bound stated.",
+        "The trace shows a claim, a timeout or visibility expiry, a second claim, and two completions or two processors.",
+        "The fix is a fencing token, an atomic claim, or a conditional ack that checks the current claim, not only a longer timeout.",
+        "The report describes a regression test that reproduces the interleaving with two workers and a pause.",
+        "The README states the model scope, assumptions, and how to run the spec."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Our consumer processes payment events. Each event has a unique id. The consumer keeps a set of processed ids in the database. In one database transaction it (a) inserts the id into processed with a unique constraint and (b) applies the side effect. If the insert conflicts, it skips the event. The queue delivers at-least-once and can redeliver after a crash. The insert and the side effect are in the same transaction, so a crash rolls back both.\n\nModel this in TLA+ and check that a payment is never applied twice. I think the design is correct, so I mainly want a non-vacuous proof: if the model passes, show me the mutation that makes it fail. Put the spec under specs/payments/ and run TLC. Include the README and the exact commands.",
+      "expected_output": "A runnable TLA+ spec and cfg under specs/payments/ that passes TLC, plus a mutation test that makes the no-double-apply invariant fail, proving the model is not vacuous.",
+      "files": [],
+      "expectations": [
+        "A TLA+ spec and TLC config exist under specs/payments/.",
+        "The spec defines TypeOK and a no-double-apply safety invariant.",
+        "TLC was actually run and the correct model passes, or the report gives a concrete bug and a root-cause fix.",
+        "The report includes a mutation test that removes the unique constraint or the processed check and shows the invariant failing.",
+        "The report explains why the pass is not vacuous: the transaction atomicity assumption, the redelivery model, and the crash window.",
+        "The README states the model scope, assumptions, and how to run the spec."
+      ]
+    }
+  ]
+}

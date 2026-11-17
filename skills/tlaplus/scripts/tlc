@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Run TLC on a TLA+ spec. Downloads tla2tools.jar on first use.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: tlc [options] SPEC.tla [CONFIG.cfg]
+
+Options:
+  --workers N|auto   TLC workers (default: 1, for deterministic traces)
+  --depth N          Simulation depth (requires --simulate)
+  --simulate         Use random simulation instead of exhaustive search
+  --timeout SEC      Kill TLC after SEC seconds (needs the timeout command)
+  --coverage MIN     Print action coverage every MIN minutes
+  --jar PATH         Use a specific tla2tools.jar
+  --no-download      Fail if the jar is not already cached
+  -h, --help         Show this help
+
+Environment:
+  TLA2TOOLS_JAR      Path to tla2tools.jar
+  TLA2TOOLS_URL      Download URL (default: latest GitHub release)
+  XDG_CACHE_HOME     Cache root (default: ~/.cache)
+
+Exit codes follow TLC: 0 pass, 11 deadlock, 12 safety violation,
+13 temporal property violation, 255 parse or semantic error.
+EOF
+}
+
+WORKERS=1
+DEPTH=""
+SIMULATE=0
+TIMEOUT=""
+COVERAGE=""
+JAR="${TLA2TOOLS_JAR:-}"
+NO_DOWNLOAD=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        --workers) WORKERS="${2:?--workers needs a value}"; shift 2 ;;
+        --depth) DEPTH="${2:?--depth needs a value}"; shift 2 ;;
+        --simulate) SIMULATE=1; shift ;;
+        --timeout) TIMEOUT="${2:?--timeout needs a value}"; shift 2 ;;
+        --coverage) COVERAGE="${2:?--coverage needs a value}"; shift 2 ;;
+        --jar) JAR="${2:?--jar needs a value}"; shift 2 ;;
+        --no-download) NO_DOWNLOAD=1; shift ;;
+        --) shift; break ;;
+        -*) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *) break ;;
+    esac
+done
+
+SPEC="${1:-}"
+CFG="${2:-}"
+
+if [ -z "$SPEC" ]; then
+    usage >&2
+    exit 2
+fi
+if [ ! -f "$SPEC" ]; then
+    echo "error: spec not found: $SPEC" >&2
+    exit 2
+fi
+if [ -z "$CFG" ]; then
+    CFG="${SPEC%.tla}.cfg"
+fi
+if [ ! -f "$CFG" ]; then
+    echo "error: config not found: $CFG" >&2
+    echo "create a .cfg next to the spec, or pass it as the second argument" >&2
+    exit 2
+fi
+
+if ! command -v java >/dev/null 2>&1; then
+    echo "error: java not found. TLC needs Java 11 or newer." >&2
+    echo "install a JDK (for example: brew install --cask temurin) and retry." >&2
+    exit 2
+fi
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tlaplus"
+DEFAULT_JAR="$CACHE_DIR/tla2tools.jar"
+URL="${TLA2TOOLS_URL:-https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar}"
+
+if [ -z "$JAR" ]; then
+    JAR="$DEFAULT_JAR"
+fi
+
+if [ ! -s "$JAR" ]; then
+    if [ "$NO_DOWNLOAD" = 1 ]; then
+        echo "error: tla2tools.jar not found at $JAR and --no-download is set" >&2
+        exit 2
+    fi
+    echo "tla2tools.jar not found; downloading to $JAR" >&2
+    mkdir -p "$(dirname "$JAR")"
+    TMP_JAR="$JAR.tmp.$$"
+    if ! curl -fL --retry 3 --connect-timeout 15 --max-time 300 \
+        -o "$TMP_JAR" "$URL"; then
+        rm -f "$TMP_JAR"
+        echo "error: download failed: $URL" >&2
+        echo "set TLA2TOOLS_JAR to an existing jar, or retry with network access." >&2
+        exit 2
+    fi
+    if [ "$(wc -c < "$TMP_JAR" | tr -d ' ')" -lt 1000000 ]; then
+        rm -f "$TMP_JAR"
+        echo "error: downloaded jar is too small; check TLA2TOOLS_URL" >&2
+        exit 2
+    fi
+    mv "$TMP_JAR" "$JAR"
+fi
+
+META_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tlc-meta.XXXXXX")"
+cleanup() {
+    rm -rf "$META_DIR"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+ARGS=(-config "$CFG" -metadir "$META_DIR" -workers "$WORKERS")
+if [ -n "$DEPTH" ] && [ "$SIMULATE" != 1 ]; then
+    echo "error: --depth only applies to simulation; add --simulate" >&2
+    echo "for an exhaustive bound, add a CONSTRAINT to the .cfg instead" >&2
+    exit 2
+fi
+if [ -n "$DEPTH" ]; then
+    ARGS+=(-depth "$DEPTH")
+fi
+if [ -n "$COVERAGE" ]; then
+    ARGS+=(-coverage "$COVERAGE")
+fi
+if [ "$SIMULATE" = 1 ]; then
+    ARGS+=(-simulate)
+fi
+
+echo "Running TLC: spec=$SPEC config=$CFG workers=$WORKERS" >&2
+
+run_java() {
+    java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC "${ARGS[@]}" "$SPEC"
+}
+
+RC=0
+if [ -n "$TIMEOUT" ]; then
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout "$TIMEOUT" java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC \
+            "${ARGS[@]}" "$SPEC"; then
+            RC=0
+        else
+            RC=$?
+        fi
+    else
+        echo "warning: timeout command not found; running without a timeout" >&2
+        if run_java; then RC=0; else RC=$?; fi
+    fi
+else
+    if run_java; then RC=0; else RC=$?; fi
+fi
+
+case "$RC" in
+    0) echo "TLC: PASS (no error found in the explored state space)" >&2 ;;
+    10) echo "TLC: ASSUMPTION FALSE (fix the constants or the ASSUME)" >&2 ;;
+    11) echo "TLC: DEADLOCK (see trace above)" >&2 ;;
+    12) echo "TLC: SAFETY VIOLATION (invariant; see trace above)" >&2 ;;
+    13) echo "TLC: TEMPORAL PROPERTY VIOLATION (see trace above)" >&2 ;;
+    124) echo "TLC: TIMEOUT (raise --timeout, shrink the model, or use a CONSTRAINT for an exhaustive bound)" >&2 ;;
+    150|151|255) echo "TLC: SPEC OR CONFIG ERROR (parse, semantic, or name mismatch; see first error above)" >&2 ;;
+    *) echo "TLC: ERROR (exit $RC)" >&2 ;;
+esac
+
+exit "$RC"
